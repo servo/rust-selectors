@@ -14,7 +14,7 @@ use std::marker::ContravariantLifetime;
 use std::mem;
 use std::ptr;
 use std::raw::Slice;
-use alloc::heap;
+use std::rt::heap;
 
 // Generic code for all small vectors
 

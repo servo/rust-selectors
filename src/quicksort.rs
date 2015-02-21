@@ -82,10 +82,10 @@ pub fn quicksort_by<T>(arr: &mut [T], compare: fn(&T, &T) -> Ordering) {
 #[cfg(test)]
 pub mod test {
     use std::cmp::Ordering;
-    use std::rand;
-    use std::rand::Rng;
+    use rand;
+    use rand::Rng;
 
-    use sort;
+    use super::quicksort_by;
 
     #[test]
     pub fn random() {
@@ -94,7 +94,7 @@ pub mod test {
             let len: uint = rng.gen();
             let mut v: Vec<int> = rng.gen_iter::<int>().take((len % 32) + 1).collect();
             fn compare_ints(a: &int, b: &int) -> Ordering { a.cmp(b) }
-            sort::quicksort_by(v.as_mut_slice(), compare_ints);
+            quicksort_by(v.as_mut_slice(), compare_ints);
             for i in range(0, v.len() - 1) {
                 assert!(v[i] <= v[i + 1])
             }
