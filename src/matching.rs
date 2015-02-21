@@ -252,8 +252,8 @@ pub struct Rule<T> {
     // This is an Arc because Rule will essentially be cloned for every node
     // that it matches. Selector contains an owned vector (through
     // CompoundSelector) and we want to avoid the allocation.
-    selector: Arc<CompoundSelector>,
-    declarations: DeclarationBlock<T>,
+    pub selector: Arc<CompoundSelector>,
+    pub declarations: DeclarationBlock<T>,
 }
 
 /// A property declaration together with its precedence among rules of equal specificity so that
@@ -261,8 +261,8 @@ pub struct Rule<T> {
 #[derive(Debug)]
 pub struct DeclarationBlock<T> {
     pub declarations: Arc<T>,
-    source_order: uint,
-    specificity: u32,
+    pub source_order: uint,
+    pub specificity: u32,
 }
 
 // FIXME(https://github.com/rust-lang/rust/issues/7671)
