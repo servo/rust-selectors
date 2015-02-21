@@ -642,9 +642,7 @@ fn parse_pseudo_element(name: &str) -> Result<PseudoElement, ()> {
 mod tests {
     use std::sync::Arc;
     use cssparser::Parser;
-    use stylesheets::Origin;
     use string_cache::Atom;
-    use parser::ParserContext;
     use super::*;
 
     fn parse(input: &str) -> Result<Vec<Selector>, ()> {
