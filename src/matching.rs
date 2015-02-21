@@ -907,28 +907,25 @@ mod tests {
     use std::cmp::Ordering;
     use std::sync::Arc;
     use super::{DeclarationBlock, Rule, SelectorMap};
-    use selectors::LocalName;
+    use parser::LocalName;
     use string_cache::Atom;
     use cssparser::Parser;
     use parser::ParserContext;
-    use url::Url;
 
     /// Helper method to get some Rules from selector strings.
     /// Each sublist of the result contains the Rules for one StyleRule.
-    fn get_mock_rules(css_selectors: &[&str]) -> Vec<Vec<Rule<T>>> {
-        use selectors::parse_selector_list;
-        use stylesheets::Origin;
+    fn get_mock_rules(css_selectors: &[&str]) -> Vec<Vec<Rule<()>>> {
+        use parser::parse_selector_list;
 
         css_selectors.iter().enumerate().map(|(i, selectors)| {
-            let url = Url::parse("about:blank").unwrap();
-            let context = ParserContext::new(Origin::Author, &url);
+            let context = ParserContext::new();
             parse_selector_list(&context, &mut Parser::new(*selectors))
             .unwrap().into_iter().map(|s| {
                 Rule {
                     selector: s.compound_selectors.clone(),
                     declarations: DeclarationBlock {
                         specificity: s.specificity,
-                        declarations: Arc::new(vec!()),
+                        declarations: Arc::new(()),
                         source_order: i,
                     }
                 }
