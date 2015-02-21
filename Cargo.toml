@@ -1,0 +1,27 @@
+[package]
+
+name = "selectors"
+version = "0.1.0"
+authors = ["Simon Sapin <simon.sapin@exyr.org>"]
+
+description = "CSS Selectors matching for Rust"
+repository = "https://github.com/servo/rust-selectors"
+readme = "README.md"
+keywords = ["css", "selectors"]
+license = "MPL-2.0"
+
+[dependencies]
+bitflags = "0.1"
+matches = "0.1"
+
+[dev-dependencies]
+rand = "0.1"
+
+[dependencies.cssparser]
+git = "https://github.com/servo/rust-cssparser"
+
+[dependencies.string_cache]
+git = "https://github.com/servo/string-cache"
+
+[dependencies.string_cache_macros]
+git = "https://github.com/servo/string-cache"
