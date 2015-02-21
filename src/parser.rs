@@ -2,17 +2,31 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use std::cmp;
 use std::ascii::{AsciiExt, OwnedAsciiExt};
+use std::cmp;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::string::CowString;
 
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
-use url::Url;
 
-use parser::ParserContext;
-use stylesheets::Origin;
+
+pub struct ParserContext {
+    pub in_user_agent_stylesheet: bool,
+    pub default_namespace: Option<Namespace>,
+    pub namespace_prefixes: HashMap<String, Namespace>,
+}
+
+impl ParserContext {
+    pub fn new() -> ParserContext {
+        ParserContext {
+            in_user_agent_stylesheet: false,
+            default_namespace: None,
+            namespace_prefixes: HashMap::new(),
+        }
+    }
+}
 
 
 #[derive(PartialEq, Clone, Debug)]
@@ -183,8 +197,7 @@ fn compute_specificity(mut selector: &CompoundSelector,
 
 
 pub fn parse_author_origin_selector_list_from_str(input: &str) -> Result<Vec<Selector>, ()> {
-    let url = Url::parse("about:blank").unwrap();
-    let context = ParserContext::new(Origin::Author, &url);
+    let context = ParserContext::new();
     parse_selector_list(&context, &mut Parser::new(input))
 }
 
@@ -297,7 +310,7 @@ fn parse_qualified_name<'i, 't>
                         in_attr_selector: bool)
                         -> Result<Option<(NamespaceConstraint, Option<CowString<'i>>)>, ()> {
     let default_namespace = |local_name| {
-        let namespace = match context.namespaces.default {
+        let namespace = match context.default_namespace {
             Some(ref ns) => NamespaceConstraint::Specific(ns.clone()),
             None => NamespaceConstraint::Any,
         };
@@ -322,7 +335,7 @@ fn parse_qualified_name<'i, 't>
             let position = input.position();
             match input.next_including_whitespace() {
                 Ok(Token::Delim('|')) => {
-                    let result = context.namespaces.prefix_map.get(&*value);
+                    let result = context.namespace_prefixes.get(&*value);
                     let namespace = try!(result.ok_or(()));
                     explicit_namespace(input, NamespaceConstraint::Specific(namespace.clone()))
                 },
@@ -606,7 +619,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         "last-of-type"  => Ok(SimpleSelector::LastOfType),
         "only-of-type"  => Ok(SimpleSelector::OnlyOfType),
         "-servo-nonzero-border" => {
-            if context.in_user_agent_stylesheet() {
+            if context.in_user_agent_stylesheet {
                 Ok(SimpleSelector::ServoNonzeroBorder)
             } else {
                 Err(())
@@ -632,11 +645,10 @@ mod tests {
     use stylesheets::Origin;
     use string_cache::Atom;
     use parser::ParserContext;
-    use url::Url;
     use super::*;
 
     fn parse(input: &str) -> Result<Vec<Selector>, ()> {
-        parse_ns(input, &ParserContext::new(Origin::Author, &Url::parse("about:blank").unwrap()))
+        parse_ns(input, &ParserContext::new())
     }
 
     fn parse_ns(input: &str, context: &ParserContext) -> Result<Vec<Selector>, ()> {
@@ -704,8 +716,7 @@ mod tests {
         })));
         // Default namespace does not apply to attribute selectors
         // https://github.com/mozilla/servo/pull/1652
-        let url = Url::parse("about:blank").unwrap();
-        let mut context = ParserContext::new(Origin::Author, &url);
+        let mut context = ParserContext::new();
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::AttrExists(AttrSelector {
@@ -720,7 +731,7 @@ mod tests {
         })));
         // Default namespace does not apply to attribute selectors
         // https://github.com/mozilla/servo/pull/1652
-        context.namespaces.default = Some(ns!(MathML));
+        context.default_namespace = Some(ns!(MathML));
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::AttrExists(AttrSelector {
