@@ -5,11 +5,9 @@
 //! Traits that nodes must implement. Breaks the otherwise-cyclic dependency between layout and
 //! style.
 
-use cssparser::RGBA;
-use legacy::{IntegerAttribute, LengthAttribute, SimpleColorAttribute, UnsignedIntegerAttribute};
-use selectors::AttrSelector;
-use util::str::LengthOrPercentageOrAuto;
+use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
+
 
 pub trait TNode<'a, E: TElement<'a>> : Clone + Copy {
     fn parent_node(self) -> Option<Self>;
@@ -56,11 +54,4 @@ pub trait TElement<'a> : Copy {
     // in the future when we have associated types and/or a more convenient
     // JS GC story... --pcwalton
     fn each_class<F>(self, callback: F) where F: FnMut(&Atom);
-}
-
-pub trait TElementAttributes : Copy {
-    fn get_length_attribute(self, attribute: LengthAttribute) -> LengthOrPercentageOrAuto;
-    fn get_integer_attribute(self, attribute: IntegerAttribute) -> Option<i32>;
-    fn get_unsigned_integer_attribute(self, attribute: UnsignedIntegerAttribute) -> Option<u32>;
-    fn get_simple_color_attribute(self, attribute: SimpleColorAttribute) -> Option<RGBA>;
 }

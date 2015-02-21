@@ -13,4 +13,4 @@ extern crate string_cache;
 //mod bloom;
 //mod matching;
 pub mod parser;
-//mod tree;
+pub mod tree;
