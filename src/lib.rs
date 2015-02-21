@@ -13,7 +13,7 @@ extern crate string_cache;
 #[no_link] #[macro_use] #[plugin] extern crate string_cache_macros;
 
 pub mod bloom;
-//pub mod matching;
+pub mod matching;
 pub mod parser;
 pub mod quicksort;
 pub mod smallvec;

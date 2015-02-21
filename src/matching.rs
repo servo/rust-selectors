@@ -7,22 +7,14 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use url::Url;
-
-use util::bloom::BloomFilter;
-use util::resource_files::read_resource_file;
-use util::smallvec::VecLike;
-use util::sort;
+use bloom::BloomFilter;
+use smallvec::VecLike;
+use quicksort::quicksort_by;
 use string_cache::Atom;
 
-use legacy::PresentationalHintSynthesis;
-use media_queries::Device;
-use tree::{TElement, TElementAttributes, TNode};
-use properties::{PropertyDeclaration, PropertyDeclarationBlock};
+use tree::{TElement, TNode};
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
-use parser::{PseudoElement, SimpleSelector, Selector};
-use stylesheets::{Stylesheet, iter_stylesheet_media_rules, iter_stylesheet_style_rules, Origin};
-
+use parser::{SimpleSelector, Selector};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -46,22 +38,22 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 /// Hence, the union of the rules keyed on each of node's classes, ID,
 /// element name, etc. will contain the Rules that actually match that
 /// node.
-struct SelectorMap {
+pub struct SelectorMap<T> {
     // TODO: Tune the initial capacity of the HashMap
-    id_hash: HashMap<Atom, Vec<Rule>>,
-    class_hash: HashMap<Atom, Vec<Rule>>,
-    local_name_hash: HashMap<Atom, Vec<Rule>>,
+    id_hash: HashMap<Atom, Vec<Rule<T>>>,
+    class_hash: HashMap<Atom, Vec<Rule<T>>>,
+    local_name_hash: HashMap<Atom, Vec<Rule<T>>>,
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
-    lower_local_name_hash: HashMap<Atom, Vec<Rule>>,
+    lower_local_name_hash: HashMap<Atom, Vec<Rule<T>>>,
     // For Rules that don't have ID, class, or element selectors.
-    universal_rules: Vec<Rule>,
+    universal_rules: Vec<Rule<T>>,
     /// Whether this hash is empty.
     empty: bool,
 }
 
-impl SelectorMap {
-    fn new() -> SelectorMap {
+impl<T> SelectorMap<T> {
+    pub fn new() -> SelectorMap<T> {
         SelectorMap {
             id_hash: HashMap::new(),
             class_hash: HashMap::new(),
@@ -76,14 +68,14 @@ impl SelectorMap {
     ///
     /// Extract matching rules as per node's ID, classes, tag name, etc..
     /// Sort the Rules at the end to maintain cascading order.
-    fn get_all_matching_rules<'a,E,N,V>(&self,
+    pub fn get_all_matching_rules<'a,E,N,V>(&self,
                                         node: &N,
                                         parent_bf: &Option<Box<BloomFilter>>,
                                         matching_rules_list: &mut V,
                                         shareable: &mut bool)
-                                        where E: TElement<'a> + TElementAttributes,
+                                        where E: TElement<'a>,
                                               N: TNode<'a,E>,
-                                              V: VecLike<DeclarationBlock> {
+                                              V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
         }
@@ -131,22 +123,22 @@ impl SelectorMap {
                                         shareable);
 
         // Sort only the rules we just added.
-        sort::quicksort_by(matching_rules_list.vec_slice_from_mut(init_len), compare);
+        quicksort_by(matching_rules_list.vec_slice_from_mut(init_len), compare);
 
-        fn compare(a: &DeclarationBlock, b: &DeclarationBlock) -> Ordering {
+        fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
             (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
         }
     }
 
     fn get_matching_rules_from_hash<'a,E,N,V>(node: &N,
                                               parent_bf: &Option<Box<BloomFilter>>,
-                                              hash: &HashMap<Atom, Vec<Rule>>,
+                                              hash: &HashMap<Atom, Vec<Rule<T>>>,
                                               key: &Atom,
                                               matching_rules: &mut V,
                                               shareable: &mut bool)
-                                              where E: TElement<'a> + TElementAttributes,
+                                              where E: TElement<'a>,
                                                     N: TNode<'a,E>,
-                                                    V: VecLike<DeclarationBlock> {
+                                                    V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
                 SelectorMap::get_matching_rules(node,
@@ -162,12 +154,12 @@ impl SelectorMap {
     /// Adds rules in `rules` that match `node` to the `matching_rules` list.
     fn get_matching_rules<'a,E,N,V>(node: &N,
                                     parent_bf: &Option<Box<BloomFilter>>,
-                                    rules: &[Rule],
+                                    rules: &[Rule<T>],
                                     matching_rules: &mut V,
                                     shareable: &mut bool)
-                                    where E: TElement<'a> + TElementAttributes,
+                                    where E: TElement<'a>,
                                           N: TNode<'a,E>,
-                                          V: VecLike<DeclarationBlock> {
+                                          V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, node, parent_bf, shareable) {
                 matching_rules.vec_push(rule.declarations.clone());
@@ -177,7 +169,7 @@ impl SelectorMap {
 
     /// Insert rule into the correct hash.
     /// Order in which to try: id_hash, class_hash, local_name_hash, universal_rules.
-    fn insert(&mut self, rule: Rule) {
+    pub fn insert(&mut self, rule: Rule<T>) {
         self.empty = false;
 
         match SelectorMap::get_id_name(&rule) {
@@ -208,7 +200,7 @@ impl SelectorMap {
     }
 
     /// Retrieve the first ID name in Rule, or None otherwise.
-    fn get_id_name(rule: &Rule) -> Option<Atom> {
+    fn get_id_name(rule: &Rule<T>) -> Option<Atom> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -222,7 +214,7 @@ impl SelectorMap {
     }
 
     /// Retrieve the FIRST class name in Rule, or None otherwise.
-    fn get_class_name(rule: &Rule) -> Option<Atom> {
+    fn get_class_name(rule: &Rule<T>) -> Option<Atom> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -236,7 +228,7 @@ impl SelectorMap {
     }
 
     /// Retrieve the name if it is a type selector, or None otherwise.
-    fn get_local_name(rule: &Rule) -> Option<LocalName> {
+    fn get_local_name(rule: &Rule<T>) -> Option<LocalName> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -255,295 +247,54 @@ impl SelectorMap {
 // rapidly increase.
 pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: uint = 4096;
 
-pub struct Stylist {
-    // List of stylesheets (including all media rules)
-    stylesheets: Vec<Stylesheet>,
 
-    // Device that the stylist is currently evaluating against.
-    pub device: Device,
-
-    // If true, a stylesheet has been added or the device has
-    // changed, and the stylist needs to be updated.
-    is_dirty: bool,
-
-    // The current selector maps, after evaluating media
-    // rules against the current device.
-    element_map: PerPseudoElementSelectorMap,
-    before_map: PerPseudoElementSelectorMap,
-    after_map: PerPseudoElementSelectorMap,
-    rules_source_order: uint,
-}
-
-impl Stylist {
-    #[inline]
-    pub fn new(device: Device) -> Stylist {
-        let mut stylist = Stylist {
-            stylesheets: vec!(),
-            device: device,
-            is_dirty: true,
-
-            element_map: PerPseudoElementSelectorMap::new(),
-            before_map: PerPseudoElementSelectorMap::new(),
-            after_map: PerPseudoElementSelectorMap::new(),
-            rules_source_order: 0u,
-        };
-        // FIXME: Add iso-8859-9.css when the document’s encoding is ISO-8859-8.
-        // FIXME: presentational-hints.css should be at author origin with zero specificity.
-        //        (Does it make a difference?)
-        for &filename in ["user-agent.css", "servo.css", "presentational-hints.css"].iter() {
-            let ua_stylesheet = Stylesheet::from_bytes(
-                &read_resource_file(&[filename]).unwrap(),
-                Url::parse(&format!("chrome:///{:?}", filename)).unwrap(),
-                None,
-                None,
-                Origin::UserAgent);
-            stylist.add_stylesheet(ua_stylesheet);
-        }
-        stylist
-    }
-
-    pub fn update(&mut self) -> bool {
-        if self.is_dirty {
-            self.element_map = PerPseudoElementSelectorMap::new();
-            self.before_map = PerPseudoElementSelectorMap::new();
-            self.after_map = PerPseudoElementSelectorMap::new();
-            self.rules_source_order = 0;
-
-            for stylesheet in self.stylesheets.iter() {
-                let (mut element_map, mut before_map, mut after_map) = match stylesheet.origin {
-                    Origin::UserAgent => (
-                        &mut self.element_map.user_agent,
-                        &mut self.before_map.user_agent,
-                        &mut self.after_map.user_agent,
-                    ),
-                    Origin::Author => (
-                        &mut self.element_map.author,
-                        &mut self.before_map.author,
-                        &mut self.after_map.author,
-                    ),
-                    Origin::User => (
-                        &mut self.element_map.user,
-                        &mut self.before_map.user,
-                        &mut self.after_map.user,
-                    ),
-                };
-                let mut rules_source_order = self.rules_source_order;
-
-                // Take apart the StyleRule into individual Rules and insert
-                // them into the SelectorMap of that priority.
-                macro_rules! append(
-                    ($style_rule: ident, $priority: ident) => {
-                        if $style_rule.declarations.$priority.len() > 0 {
-                            for selector in $style_rule.selectors.iter() {
-                                let map = match selector.pseudo_element {
-                                    None => &mut element_map,
-                                    Some(PseudoElement::Before) => &mut before_map,
-                                    Some(PseudoElement::After) => &mut after_map,
-                                };
-                                map.$priority.insert(Rule {
-                                        selector: selector.compound_selectors.clone(),
-                                        declarations: DeclarationBlock {
-                                            specificity: selector.specificity,
-                                            declarations: $style_rule.declarations.$priority.clone(),
-                                            source_order: rules_source_order,
-                                        },
-                                });
-                            }
-                        }
-                    };
-                );
-
-                iter_stylesheet_style_rules(stylesheet, &self.device, |style_rule| {
-                    append!(style_rule, normal);
-                    append!(style_rule, important);
-                    rules_source_order += 1;
-                });
-                self.rules_source_order = rules_source_order;
-            }
-
-            self.is_dirty = false;
-            return true;
-        }
-
-        false
-    }
-
-    pub fn set_device(&mut self, device: Device) {
-        let is_dirty = self.is_dirty || self.stylesheets.iter().any(|stylesheet| {
-            let mut stylesheet_dirty = false;
-            iter_stylesheet_media_rules(stylesheet, |rule| {
-                stylesheet_dirty |= rule.media_queries.evaluate(&self.device) !=
-                                    rule.media_queries.evaluate(&device);
-            });
-            stylesheet_dirty
-        });
-
-        self.device = device;
-        self.is_dirty |= is_dirty;
-    }
-
-    pub fn add_quirks_mode_stylesheet(&mut self) {
-        self.add_stylesheet(Stylesheet::from_bytes(
-            &read_resource_file(&["quirks-mode.css"]).unwrap(),
-            Url::parse("chrome:///quirks-mode.css").unwrap(),
-            None,
-            None,
-            Origin::UserAgent))
-    }
-
-    pub fn add_stylesheet(&mut self, stylesheet: Stylesheet) {
-        self.stylesheets.push(stylesheet);
-        self.is_dirty = true;
-    }
-
-    /// Returns the applicable CSS declarations for the given element. This corresponds to
-    /// `ElementRuleCollector` in WebKit.
-    ///
-    /// The returned boolean indicates whether the style is *shareable*; that is, whether the
-    /// matched selectors are simple enough to allow the matching logic to be reduced to the logic
-    /// in `css::matching::PrivateMatchMethods::candidate_element_allows_for_style_sharing`.
-    pub fn push_applicable_declarations<'a,E,N,V>(
-                                        &self,
-                                        element: &N,
-                                        parent_bf: &Option<Box<BloomFilter>>,
-                                        style_attribute: Option<&PropertyDeclarationBlock>,
-                                        pseudo_element: Option<PseudoElement>,
-                                        applicable_declarations: &mut V)
-                                        -> bool
-                                        where E: TElement<'a> + TElementAttributes,
-                                              N: TNode<'a,E>,
-                                              V: VecLike<DeclarationBlock> {
-        assert!(!self.is_dirty);
-        assert!(element.is_element());
-        assert!(style_attribute.is_none() || pseudo_element.is_none(),
-                "Style attributes do not apply to pseudo-elements");
-
-        let map = match pseudo_element {
-            None => &self.element_map,
-            Some(PseudoElement::Before) => &self.before_map,
-            Some(PseudoElement::After) => &self.after_map,
-        };
-
-        let mut shareable = true;
-
-        // Step 1: Virtual rules that are synthesized from legacy HTML attributes.
-        self.synthesize_presentational_hints_for_legacy_attributes(element,
-                                                                   applicable_declarations,
-                                                                   &mut shareable);
-
-        // Step 2: Normal rules.
-        map.user_agent.normal.get_all_matching_rules(element,
-                                                     parent_bf,
-                                                     applicable_declarations,
-                                                     &mut shareable);
-        map.user.normal.get_all_matching_rules(element,
-                                               parent_bf,
-                                               applicable_declarations,
-                                               &mut shareable);
-        map.author.normal.get_all_matching_rules(element,
-                                                 parent_bf,
-                                                 applicable_declarations,
-                                                 &mut shareable);
-
-        // Step 3: Normal style attributes.
-        style_attribute.map(|sa| {
-            shareable = false;
-            applicable_declarations.vec_push(DeclarationBlock::from_declarations(sa.normal
-                                                                                   .clone()))
-        });
-
-        // Step 4: Author-supplied `!important` rules.
-        map.author.important.get_all_matching_rules(element,
-                                                    parent_bf,
-                                                    applicable_declarations,
-                                                    &mut shareable);
-
-        // Step 5: `!important` style attributes.
-        style_attribute.map(|sa| {
-            shareable = false;
-            applicable_declarations.vec_push(DeclarationBlock::from_declarations(sa.important
-                                                                                   .clone()))
-        });
-
-        // Step 6: User and UA `!important` rules.
-        map.user.important.get_all_matching_rules(element,
-                                                  parent_bf,
-                                                  applicable_declarations,
-                                                  &mut shareable);
-        map.user_agent.important.get_all_matching_rules(element,
-                                                        parent_bf,
-                                                        applicable_declarations,
-                                                        &mut shareable);
-
-        shareable
-    }
-}
-
-struct PerOriginSelectorMap {
-    normal: SelectorMap,
-    important: SelectorMap,
-}
-
-impl PerOriginSelectorMap {
-    #[inline]
-    fn new() -> PerOriginSelectorMap {
-        PerOriginSelectorMap {
-            normal: SelectorMap::new(),
-            important: SelectorMap::new(),
-        }
-    }
-}
-
-struct PerPseudoElementSelectorMap {
-    user_agent: PerOriginSelectorMap,
-    author: PerOriginSelectorMap,
-    user: PerOriginSelectorMap,
-}
-
-impl PerPseudoElementSelectorMap {
-    #[inline]
-    fn new() -> PerPseudoElementSelectorMap {
-        PerPseudoElementSelectorMap {
-            user_agent: PerOriginSelectorMap::new(),
-            author: PerOriginSelectorMap::new(),
-            user: PerOriginSelectorMap::new(),
-        }
-    }
-}
-
-#[derive(Clone)]
-struct Rule {
+pub struct Rule<T> {
     // This is an Arc because Rule will essentially be cloned for every node
     // that it matches. Selector contains an owned vector (through
     // CompoundSelector) and we want to avoid the allocation.
     selector: Arc<CompoundSelector>,
-    declarations: DeclarationBlock,
+    declarations: DeclarationBlock<T>,
 }
 
 /// A property declaration together with its precedence among rules of equal specificity so that
 /// we can sort them.
-#[derive(Clone, Debug)]
-pub struct DeclarationBlock {
-    pub declarations: Arc<Vec<PropertyDeclaration>>,
+#[derive(Debug)]
+pub struct DeclarationBlock<T> {
+    pub declarations: Arc<T>,
     source_order: uint,
     specificity: u32,
 }
 
-impl DeclarationBlock {
+// FIXME(https://github.com/rust-lang/rust/issues/7671)
+// derive(Clone) requires T: Clone, even though Arc<T>: T regardless.
+impl<T> Clone for DeclarationBlock<T> {
+    fn clone(&self) -> DeclarationBlock<T> {
+        DeclarationBlock {
+            declarations: self.declarations.clone(),
+            source_order: self.source_order,
+            specificity: self.specificity,
+        }
+    }
+}
+
+// FIXME(https://github.com/rust-lang/rust/issues/7671)
+impl<T> Clone for Rule<T> {
+    fn clone(&self) -> Rule<T> {
+        Rule {
+            selector: self.selector.clone(),
+            declarations: self.declarations.clone(),
+        }
+    }
+}
+
+impl<T> DeclarationBlock<T> {
     #[inline]
-    pub fn from_declarations(declarations: Arc<Vec<PropertyDeclaration>>) -> DeclarationBlock {
+    pub fn from_declarations(declarations: Arc<T>) -> DeclarationBlock<T> {
         DeclarationBlock {
             declarations: declarations,
             source_order: 0,
             specificity: 0,
         }
-    }
-
-    /// A convenience function to create a declaration block from a single declaration. This is
-    /// primarily used in `synthesize_rules_for_legacy_attributes`.
-    #[inline]
-    pub fn from_declaration(rule: PropertyDeclaration) -> DeclarationBlock {
-        DeclarationBlock::from_declarations(Arc::new(vec![rule]))
     }
 }
 
@@ -1140,7 +891,7 @@ fn matches_last_child<'a,E,N>(element: &N) -> bool where E: TElement<'a>, N: TNo
     }
 }
 
-fn find_push(map: &mut HashMap<Atom, Vec<Rule>>, key: Atom, value: Rule) {
+fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>>, key: Atom, value: Rule<T>) {
     match map.get_mut(&key) {
         Some(vec) => {
             vec.push(value);
@@ -1164,7 +915,7 @@ mod tests {
 
     /// Helper method to get some Rules from selector strings.
     /// Each sublist of the result contains the Rules for one StyleRule.
-    fn get_mock_rules(css_selectors: &[&str]) -> Vec<Vec<Rule>> {
+    fn get_mock_rules(css_selectors: &[&str]) -> Vec<Vec<Rule<T>>> {
         use selectors::parse_selector_list;
         use stylesheets::Origin;
 
