@@ -9,7 +9,7 @@ use std::mem::zeroed as i;
 use std::cmp;
 use std::fmt;
 use std::intrinsics;
-use std::iter::FromIterator;
+use std::iter::{IntoIterator, FromIterator};
 use std::marker::ContravariantLifetime;
 use std::mem;
 use std::ptr;
@@ -410,9 +410,10 @@ macro_rules! def_small_vector(
         }
 
         impl<T> FromIterator<T> for $name<T> {
-            fn from_iter<I: Iterator<Item=T>>(iter: I) -> $name<T> {
+            fn from_iter<I: IntoIterator<Item=T>>(iterable: I) -> $name<T> {
                 let mut v = $name::new();
 
+                let iter = iterable.into_iter();
                 let (lower_size_bound, _) = iter.size_hint();
 
                 if lower_size_bound > v.cap() {
