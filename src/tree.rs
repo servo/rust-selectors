@@ -9,7 +9,7 @@ use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
 
 
-pub trait TNode<'a, E: TElement<'a>> : Clone + Copy {
+pub trait TNode<E> : Clone + Copy {
     fn parent_node(self) -> Option<Self>;
     fn first_child(self) -> Option<Self>;
     fn last_child(self) -> Option<Self>;
