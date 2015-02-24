@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#![feature(box_syntax, int_uint, plugin, core, hash, unsafe_destructor, alloc)]
-#![cfg_attr(test, feature(test))]
+#![feature(box_syntax, int_uint, plugin, core, unsafe_destructor, alloc, std_misc)]
+#![cfg_attr(test, feature(test, hash))]
 #![plugin(string_cache_plugin)]
 
 #[macro_use] extern crate bitflags;
