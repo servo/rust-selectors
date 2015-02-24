@@ -78,10 +78,18 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
         }
     }
 
+    fn begin_mut(&mut self) -> *mut T {
+        self.begin() as *mut T
+    }
+
     fn end(&self) -> *const T {
         unsafe {
             self.begin().offset(self.len() as int)
         }
+    }
+
+    fn end_mut(&mut self) -> *mut T {
+        self.end() as *mut T
     }
 
     fn iter<'a>(&'a self) -> SmallVecIterator<'a,T> {
@@ -93,12 +101,10 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
     }
 
     fn mut_iter<'a>(&'a mut self) -> SmallVecMutIterator<'a,T> {
-        unsafe {
-            SmallVecMutIterator {
-                ptr: mem::transmute(self.begin()),
-                end: mem::transmute(self.end()),
-                _lifetime: PhantomData,
-            }
+        SmallVecMutIterator {
+            ptr: self.begin_mut(),
+            end: self.end_mut(),
+            _lifetime: PhantomData,
         }
     }
 
@@ -106,9 +112,8 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
     /// actually clears out the original array instead of moving it.
     fn into_iter<'a>(&'a mut self) -> SmallVecMoveIterator<'a,T> {
         unsafe {
-            let iter = mem::transmute(self.iter());
             let ptr_opt = if self.spilled() {
-                Some(mem::transmute(self.ptr()))
+                Some(self.mut_ptr() as *mut u8)
             } else {
                 None
             };
@@ -116,6 +121,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
             let inline_size = self.inline_size();
             self.set_cap(inline_size);
             self.set_len(0);
+            let iter = self.mut_iter();
             SmallVecMoveIterator {
                 allocation: ptr_opt,
                 cap: cap,
@@ -129,8 +135,8 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
         if self.len() == cap {
             self.grow(cmp::max(cap * 2, 1))
         }
+        let end = self.end_mut();
         unsafe {
-            let end: &mut T = mem::transmute(self.end());
             ptr::write(end, value);
             let len = self.len();
             self.set_len(len + 1)
@@ -147,17 +153,13 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
         if self.len() == 0 {
             return None
         }
-
+        let last_index = self.len() - 1;
+        if (last_index as int) < 0 {
+            panic!("overflow")
+        }
         unsafe {
-            let mut value: T = mem::uninitialized();
-            let last_index = self.len() - 1;
-
-            if (last_index as int) < 0 {
-                panic!("overflow")
-            }
-            let end_ptr = self.begin().offset(last_index as int);
-
-            mem::swap(&mut value, mem::transmute::<*const T,&mut T>(end_ptr));
+            let end_ptr = self.begin_mut().offset(last_index as int);
+            let value = ptr::replace(end_ptr, mem::uninitialized());
             self.set_len(last_index);
             Some(value)
         }
@@ -175,8 +177,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
                                  mem::size_of::<T>() * self.cap(),
                                  mem::min_align_of::<T>())
             } else {
-                let mut_begin: *mut T = mem::transmute(self.begin());
-                intrinsics::set_memory(mut_begin, 0, self.len())
+                intrinsics::set_memory(self.begin_mut(), 0, self.len())
             }
 
             self.set_ptr(new_alloc);
@@ -189,7 +190,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
             self.fail_bounds_check(index)
         }
         unsafe {
-            mem::transmute(self.begin().offset(index as int))
+            &*self.begin().offset(index as int)
         }
     }
 
@@ -198,7 +199,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
             self.fail_bounds_check(index)
         }
         unsafe {
-            mem::transmute(self.begin().offset(index as int))
+            &mut *self.begin_mut().offset(index as int)
         }
     }
 
@@ -264,7 +265,7 @@ impl<'a,T> Iterator for SmallVecIterator<'a,T> {
             } else {
                 self.ptr.offset(1)
             };
-            Some(mem::transmute(old))
+            Some(&*old)
         }
     }
 }
@@ -290,7 +291,7 @@ impl<'a,T> Iterator for SmallVecMutIterator<'a,T> {
             } else {
                 self.ptr.offset(1)
             };
-            Some(mem::transmute(old))
+            Some(&mut *old)
         }
     }
 }
@@ -298,7 +299,7 @@ impl<'a,T> Iterator for SmallVecMutIterator<'a,T> {
 pub struct SmallVecMoveIterator<'a, T: 'a> {
     allocation: Option<*mut u8>,
     cap: uint,
-    iter: SmallVecIterator<'a,T>,
+    iter: SmallVecMutIterator<'a,T>,
 }
 
 impl<'a, T: 'a> Iterator for SmallVecMoveIterator<'a,T> {
@@ -306,12 +307,11 @@ impl<'a, T: 'a> Iterator for SmallVecMoveIterator<'a,T> {
 
     #[inline]
     fn next(&mut self) -> Option<T> {
-        unsafe {
-            match self.iter.next() {
-                None => None,
-                Some(reference) => {
+        match self.iter.next() {
+            None => None,
+            Some(reference) => {
+                unsafe {
                     // Zero out the values as we go so they don't get double-freed.
-                    let reference: &mut T = mem::transmute(reference);
                     Some(mem::replace(reference, mem::zeroed()))
                 }
             }
@@ -329,7 +329,7 @@ impl<'a, T: 'a> Drop for SmallVecMoveIterator<'a,T> {
             None => {}
             Some(allocation) => {
                 unsafe {
-                    heap::deallocate(allocation as *mut u8,
+                    heap::deallocate(allocation,
                                      mem::size_of::<T>() * self.cap,
                                      mem::min_align_of::<T>())
                 }
@@ -368,10 +368,10 @@ macro_rules! def_small_vector(
                 self.ptr
             }
             unsafe fn mut_ptr(&mut self) -> *mut T {
-                mem::transmute(self.ptr)
+                self.ptr as *mut T
             }
             unsafe fn set_ptr(&mut self, new_ptr: *mut T) {
-                self.ptr = mem::transmute(new_ptr)
+                self.ptr = new_ptr as *const T
             }
         }
 
