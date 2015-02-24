@@ -10,7 +10,7 @@ use std::cmp;
 use std::fmt;
 use std::intrinsics;
 use std::iter::{IntoIterator, FromIterator};
-use std::marker::ContravariantLifetime;
+use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 use std::raw::Slice;
@@ -88,7 +88,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
         SmallVecIterator {
             ptr: self.begin(),
             end: self.end(),
-            lifetime: ContravariantLifetime::<'a>,
+            _lifetime: PhantomData,
         }
     }
 
@@ -97,7 +97,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
             SmallVecMutIterator {
                 ptr: mem::transmute(self.begin()),
                 end: mem::transmute(self.end()),
-                lifetime: ContravariantLifetime::<'a>,
+                _lifetime: PhantomData,
             }
         }
     }
@@ -120,7 +120,6 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
                 allocation: ptr_opt,
                 cap: cap,
                 iter: iter,
-                lifetime: ContravariantLifetime::<'a>,
             }
         }
     }
@@ -244,10 +243,10 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
     }
 }
 
-pub struct SmallVecIterator<'a,T> {
+pub struct SmallVecIterator<'a, T: 'a> {
     ptr: *const T,
     end: *const T,
-    lifetime: ContravariantLifetime<'a>
+    _lifetime: PhantomData<&'a T>
 }
 
 impl<'a,T> Iterator for SmallVecIterator<'a,T> {
@@ -270,10 +269,10 @@ impl<'a,T> Iterator for SmallVecIterator<'a,T> {
     }
 }
 
-pub struct SmallVecMutIterator<'a,T> {
+pub struct SmallVecMutIterator<'a, T: 'a> {
     ptr: *mut T,
     end: *mut T,
-    lifetime: ContravariantLifetime<'a>,
+    _lifetime: PhantomData<&'a T>,
 }
 
 impl<'a,T> Iterator for SmallVecMutIterator<'a,T> {
@@ -296,11 +295,10 @@ impl<'a,T> Iterator for SmallVecMutIterator<'a,T> {
     }
 }
 
-pub struct SmallVecMoveIterator<'a,T> {
+pub struct SmallVecMoveIterator<'a, T: 'a> {
     allocation: Option<*mut u8>,
     cap: uint,
     iter: SmallVecIterator<'a,T>,
-    lifetime: ContravariantLifetime<'a>,
 }
 
 impl<'a, T: 'a> Iterator for SmallVecMoveIterator<'a,T> {
