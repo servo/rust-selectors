@@ -3,10 +3,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use std::ascii::{AsciiExt, OwnedAsciiExt};
+use std::borrow::Cow;
 use std::cmp;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::string::CowString;
 
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
@@ -308,7 +308,7 @@ enum SimpleSelectorParseResult {
 fn parse_qualified_name<'i, 't>
                        (context: &ParserContext, input: &mut Parser<'i, 't>,
                         in_attr_selector: bool)
-                        -> Result<Option<(NamespaceConstraint, Option<CowString<'i>>)>, ()> {
+                        -> Result<Option<(NamespaceConstraint, Option<Cow<'i, str>>)>, ()> {
     let default_namespace = |local_name| {
         let namespace = match context.default_namespace {
             Some(ref ns) => NamespaceConstraint::Specific(ns.clone()),
