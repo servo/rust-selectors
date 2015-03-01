@@ -9,7 +9,9 @@ use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
 
 
-pub trait TNode<E> : Clone + Copy {
+pub trait TNode<'a>: Clone + Copy {
+    type Element: TElement<'a>;
+
     fn parent_node(self) -> Option<Self>;
     fn first_child(self) -> Option<Self>;
     fn last_child(self) -> Option<Self>;
@@ -17,7 +19,7 @@ pub trait TNode<E> : Clone + Copy {
     fn next_sibling(self) -> Option<Self>;
     fn is_document(self) -> bool;
     fn is_element(self) -> bool;
-    fn as_element(self) -> E;
+    fn as_element(self) -> Self::Element;
     fn match_attr<F>(self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
     fn is_html_element_in_html_document(self) -> bool;
 
@@ -34,7 +36,7 @@ pub trait TNode<E> : Clone + Copy {
     unsafe fn set_dirty_descendants(self, value: bool);
 }
 
-pub trait TElement<'a> : Copy {
+pub trait TElement<'a>: Copy {
     fn get_attr(self, namespace: &Namespace, attr: &Atom) -> Option<&'a str>;
     fn get_attrs(self, attr: &Atom) -> Vec<&'a str>;
     fn get_link(self) -> Option<&'a str>;
