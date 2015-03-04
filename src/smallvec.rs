@@ -269,6 +269,24 @@ impl<'a,T> Iterator for SmallVecIterator<'a,T> {
     }
 }
 
+impl<'a,T> DoubleEndedIterator for SmallVecIterator<'a,T> {
+    #[inline]
+    fn next_back(&mut self) -> Option<&'a T> {
+        unsafe {
+            if self.ptr == self.end {
+                return None
+            }
+            let old = self.end;
+            self.end = if mem::size_of::<T>() == 0 {
+                mem::transmute(self.end as uint - 1)
+            } else {
+                self.end.offset(-1)
+            };
+            Some(mem::transmute(self.end))
+        }
+    }
+}
+
 pub struct SmallVecMutIterator<'a, T: 'a> {
     ptr: *mut T,
     end: *mut T,
