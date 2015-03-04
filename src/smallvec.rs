@@ -276,7 +276,6 @@ impl<'a,T> DoubleEndedIterator for SmallVecIterator<'a,T> {
             if self.ptr == self.end {
                 return None
             }
-            let old = self.end;
             self.end = if mem::size_of::<T>() == 0 {
                 mem::transmute(self.end as uint - 1)
             } else {
