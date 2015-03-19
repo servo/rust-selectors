@@ -13,6 +13,7 @@
 extern crate string_cache;
 
 pub mod bloom;
+pub mod fnv;
 pub mod matching;
 pub mod parser;
 pub mod quicksort;

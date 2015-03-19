@@ -6,16 +6,19 @@ use std::ascii::{AsciiExt, OwnedAsciiExt};
 use std::borrow::Cow;
 use std::cmp;
 use std::collections::HashMap;
+use std::collections::hash_state::DefaultState;
+use std::default::Default;
 use std::sync::Arc;
 
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
 
+use fnv::FnvHasher;
 
 pub struct ParserContext {
     pub in_user_agent_stylesheet: bool,
     pub default_namespace: Option<Namespace>,
-    pub namespace_prefixes: HashMap<String, Namespace>,
+    pub namespace_prefixes: HashMap<String, Namespace, DefaultState<FnvHasher>>,
 }
 
 impl ParserContext {
@@ -23,7 +26,7 @@ impl ParserContext {
         ParserContext {
             in_user_agent_stylesheet: false,
             default_namespace: None,
-            namespace_prefixes: HashMap::new(),
+            namespace_prefixes: HashMap::with_hash_state(Default::default()),
         }
     }
 }
