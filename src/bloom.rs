@@ -216,38 +216,36 @@ fn hash2(hash: u32) -> u32 {
 
 #[test]
 fn create_and_insert_some_stuff() {
-    use std::iter::range;
-
     let mut bf = BloomFilter::new();
 
-    for i in range(0u, 1000) {
+    for i in 0u .. 1000 {
         bf.insert(&i);
     }
 
-    for i in range(0u, 1000) {
+    for i in 0u .. 1000 {
         assert!(bf.might_contain(&i));
     }
 
     let false_positives =
-        range(1001u, 2000).filter(|i| bf.might_contain(i)).count();
+        (1001u .. 2000).filter(|i| bf.might_contain(i)).count();
 
     assert!(false_positives < 10); // 1%.
 
-    for i in range(0u, 100) {
+    for i in 0u .. 100 {
         bf.remove(&i);
     }
 
-    for i in range(100u, 1000) {
+    for i in 100u .. 1000 {
         assert!(bf.might_contain(&i));
     }
 
-    let false_positives = range(0u, 100).filter(|i| bf.might_contain(i)).count();
+    let false_positives = (0u .. 100).filter(|i| bf.might_contain(i)).count();
 
     assert!(false_positives < 2); // 2%.
 
     bf.clear();
 
-    for i in range(0u, 2000) {
+    for i in 0u .. 2000 {
         assert!(!bf.might_contain(&i));
     }
 }
@@ -257,20 +255,19 @@ mod bench {
     extern crate test;
 
     use std::hash::{hash, SipHasher};
-    use std::iter;
     use super::BloomFilter;
 
     #[bench]
     fn create_insert_1000_remove_100_lookup_100(b: &mut test::Bencher) {
         b.iter(|| {
             let mut bf = BloomFilter::new();
-            for i in iter::range(0u, 1000) {
+            for i in 0u .. 1000 {
                 bf.insert(&i);
             }
-            for i in iter::range(0u, 100) {
+            for i in 0u .. 100 {
                 bf.remove(&i);
             }
-            for i in iter::range(100u, 200) {
+            for i in 100u .. 200 {
                 test::black_box(bf.might_contain(&i));
             }
         });
@@ -280,7 +277,7 @@ mod bench {
     fn might_contain(b: &mut test::Bencher) {
         let mut bf = BloomFilter::new();
 
-        for i in iter::range(0u, 1000) {
+        for i in 0u .. 1000 {
             bf.insert(&i);
         }
 
@@ -311,7 +308,7 @@ mod bench {
     #[bench]
     fn remove(b: &mut test::Bencher) {
         let mut bf = BloomFilter::new();
-        for i in range(0u, 1000) {
+        for i in 0u .. 1000 {
             bf.insert(&i);
         }
 
