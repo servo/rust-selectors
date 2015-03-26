@@ -177,7 +177,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
                                  mem::size_of::<T>() * self.cap(),
                                  mem::min_align_of::<T>())
             } else {
-                intrinsics::set_memory(self.begin_mut(), 0, self.len())
+                intrinsics::write_bytes(self.begin_mut(), 0, self.len())
             }
 
             self.set_ptr(new_alloc);
@@ -555,10 +555,10 @@ pub mod tests {
         let mut v = SmallVec16::new();
         v.push("hello".to_owned());
         v.push("there".to_owned());
-        assert_eq!(v.as_slice(), vec![
+        assert_eq!(v.as_slice(), &[
             "hello".to_owned(),
             "there".to_owned(),
-        ].as_slice());
+        ][..]);
     }
 
     #[test]
@@ -568,12 +568,12 @@ pub mod tests {
         v.push("there".to_owned());
         v.push("burma".to_owned());
         v.push("shave".to_owned());
-        assert_eq!(v.as_slice(), vec![
+        assert_eq!(v.as_slice(), &[
             "hello".to_owned(),
             "there".to_owned(),
             "burma".to_owned(),
             "shave".to_owned(),
-        ].as_slice());
+        ][..]);
     }
 
     #[test]
@@ -587,7 +587,7 @@ pub mod tests {
         v.push("there".to_owned());
         v.push("burma".to_owned());
         v.push("shave".to_owned());
-        assert_eq!(v.as_slice(), vec![
+        assert_eq!(v.as_slice(), &[
             "hello".to_owned(),
             "there".to_owned(),
             "burma".to_owned(),
@@ -596,6 +596,6 @@ pub mod tests {
             "there".to_owned(),
             "burma".to_owned(),
             "shave".to_owned(),
-        ].as_slice());
+        ][..]);
     }
 }
