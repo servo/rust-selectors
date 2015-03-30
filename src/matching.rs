@@ -5,7 +5,7 @@
 use std::ascii::AsciiExt;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::collections::hash_state::{DefaultState, HashState};
+use std::collections::hash_state::DefaultState;
 use std::default::Default;
 use std::sync::Arc;
 
@@ -247,7 +247,7 @@ impl<T> SelectorMap<T> {
 // The bloom filter for descendant CSS selectors will have a <1% false
 // positive rate until it has this many selectors in it, then it will
 // rapidly increase.
-pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: uint = 4096;
+pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: usize = 4096;
 
 
 pub struct Rule<T> {
@@ -263,7 +263,7 @@ pub struct Rule<T> {
 #[derive(Debug)]
 pub struct DeclarationBlock<T> {
     pub declarations: Arc<T>,
-    pub source_order: uint,
+    pub source_order: usize,
     pub specificity: u32,
 }
 
@@ -963,7 +963,7 @@ mod tests {
     #[test]
     fn test_get_local_name(){
         let rules_list = get_mock_rules(&["img.foo", "#top", "IMG", "ImG"]);
-        let check = |i: uint, names: Option<(&str, &str)>| {
+        let check = |i: usize, names: Option<(&str, &str)>| {
             assert!(SelectorMap::get_local_name(&rules_list[i][0])
                     == names.map(|(name, lower_name)| LocalName {
                             name: Atom::from_slice(name),

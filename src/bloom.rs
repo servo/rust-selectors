@@ -6,10 +6,10 @@
 
 use string_cache::{Atom, Namespace};
 
-const KEY_SIZE: uint = 12;
-const ARRAY_SIZE: uint = 1 << KEY_SIZE;
+const KEY_SIZE: usize = 12;
+const ARRAY_SIZE: usize = 1 << KEY_SIZE;
 const KEY_MASK: u32 = (1 << KEY_SIZE) - 1;
-const KEY_SHIFT: uint = 16;
+const KEY_SHIFT: usize = 16;
 
 /// A counting Bloom filter with 8-bit counters.  For now we assume
 /// that having two hash functions is enough, but we may revisit that
@@ -81,22 +81,22 @@ impl BloomFilter {
 
     #[inline]
     fn first_slot(&self, hash: u32) -> &u8 {
-        &self.counters[hash1(hash) as uint]
+        &self.counters[hash1(hash) as usize]
     }
 
     #[inline]
     fn first_mut_slot(&mut self, hash: u32) -> &mut u8 {
-        &mut self.counters[hash1(hash) as uint]
+        &mut self.counters[hash1(hash) as usize]
     }
 
     #[inline]
     fn second_slot(&self, hash: u32) -> &u8 {
-        &self.counters[hash2(hash) as uint]
+        &self.counters[hash2(hash) as usize]
     }
 
     #[inline]
     fn second_mut_slot(&mut self, hash: u32) -> &mut u8 {
-        &mut self.counters[hash2(hash) as uint]
+        &mut self.counters[hash2(hash) as usize]
     }
 
     #[inline]
@@ -168,7 +168,7 @@ pub trait BloomHash {
     fn bloom_hash(&self) -> u32;
 }
 
-impl BloomHash for int {
+impl BloomHash for isize {
     #[allow(exceeding_bitshifts)]
     #[inline]
     fn bloom_hash(&self) -> u32 {
@@ -176,7 +176,7 @@ impl BloomHash for int {
     }
 }
 
-impl BloomHash for uint {
+impl BloomHash for usize {
     #[allow(exceeding_bitshifts)]
     #[inline]
     fn bloom_hash(&self) -> u32 {
@@ -218,34 +218,34 @@ fn hash2(hash: u32) -> u32 {
 fn create_and_insert_some_stuff() {
     let mut bf = BloomFilter::new();
 
-    for i in 0u .. 1000 {
+    for i in 0_usize .. 1000 {
         bf.insert(&i);
     }
 
-    for i in 0u .. 1000 {
+    for i in 0_usize .. 1000 {
         assert!(bf.might_contain(&i));
     }
 
     let false_positives =
-        (1001u .. 2000).filter(|i| bf.might_contain(i)).count();
+        (1001_usize .. 2000).filter(|i| bf.might_contain(i)).count();
 
     assert!(false_positives < 10); // 1%.
 
-    for i in 0u .. 100 {
+    for i in 0_usize .. 100 {
         bf.remove(&i);
     }
 
-    for i in 100u .. 1000 {
+    for i in 100_usize .. 1000 {
         assert!(bf.might_contain(&i));
     }
 
-    let false_positives = (0u .. 100).filter(|i| bf.might_contain(i)).count();
+    let false_positives = (0_usize .. 100).filter(|i| bf.might_contain(i)).count();
 
     assert!(false_positives < 2); // 2%.
 
     bf.clear();
 
-    for i in 0u .. 2000 {
+    for i in 0_usize .. 2000 {
         assert!(!bf.might_contain(&i));
     }
 }
@@ -261,13 +261,13 @@ mod bench {
     fn create_insert_1000_remove_100_lookup_100(b: &mut test::Bencher) {
         b.iter(|| {
             let mut bf = BloomFilter::new();
-            for i in 0u .. 1000 {
+            for i in 0_usize .. 1000 {
                 bf.insert(&i);
             }
-            for i in 0u .. 100 {
+            for i in 0_usize .. 100 {
                 bf.remove(&i);
             }
-            for i in 100u .. 200 {
+            for i in 100_usize .. 200 {
                 test::black_box(bf.might_contain(&i));
             }
         });
@@ -277,11 +277,11 @@ mod bench {
     fn might_contain(b: &mut test::Bencher) {
         let mut bf = BloomFilter::new();
 
-        for i in 0u .. 1000 {
+        for i in 0_usize .. 1000 {
             bf.insert(&i);
         }
 
-        let mut i = 0u;
+        let mut i = 0_usize;
 
         b.bench_n(1000, |b| {
             b.iter(|| {
@@ -296,7 +296,7 @@ mod bench {
         let mut bf = BloomFilter::new();
 
         b.bench_n(1000, |b| {
-            let mut i = 0u;
+            let mut i = 0_usize;
 
             b.iter(|| {
                 test::black_box(bf.insert(&i));
@@ -308,12 +308,12 @@ mod bench {
     #[bench]
     fn remove(b: &mut test::Bencher) {
         let mut bf = BloomFilter::new();
-        for i in 0u .. 1000 {
+        for i in 0_usize .. 1000 {
             bf.insert(&i);
         }
 
         b.bench_n(1000, |b| {
-            let mut i = 0u;
+            let mut i = 0_usize;
 
             b.iter(|| {
                 bf.remove(&i);
@@ -321,14 +321,14 @@ mod bench {
             });
         });
 
-        test::black_box(bf.might_contain(&0u));
+        test::black_box(bf.might_contain(&0_usize));
     }
 
     #[bench]
     fn hash_a_uint(b: &mut test::Bencher) {
-        let mut i = 0u;
+        let mut i = 0_usize;
         b.iter(|| {
-            test::black_box(hash::<uint, SipHasher>(&i));
+            test::black_box(hash::<usize, SipHasher>(&i));
             i += 1;
         })
     }
