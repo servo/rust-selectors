@@ -686,11 +686,17 @@ pub fn matches_simple_selector<'a,N>(selector: &SimpleSelector,
                 None => false,
             }
         }
-
+        // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
         SimpleSelector::Hover => {
             *shareable = false;
             let elem = element.as_element();
             elem.get_hover_state()
+        },
+        // https://html.spec.whatwg.org/multipage/scripting.html#selector-focus
+        SimpleSelector::Focus => {
+            *shareable = false;
+            let elem = element.as_element();
+            elem.get_focus_state()
         },
         // http://www.whatwg.org/html/#selector-disabled
         SimpleSelector::Disabled => {

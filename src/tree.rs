@@ -43,6 +43,7 @@ pub trait TElement<'a>: Copy {
     fn get_local_name(self) -> &'a Atom;
     fn get_namespace(self) -> &'a Namespace;
     fn get_hover_state(self) -> bool;
+    fn get_focus_state(self) -> bool;
     fn get_id(self) -> Option<Atom>;
     fn get_disabled_state(self) -> bool;
     fn get_enabled_state(self) -> bool;
