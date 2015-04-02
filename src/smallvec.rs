@@ -508,6 +508,8 @@ macro_rules! def_small_vector(
                 new_vector
             }
         }
+
+        unsafe impl<T: Send> Send for $name<T> {}
     )
 );
 
