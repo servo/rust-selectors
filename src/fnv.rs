@@ -6,7 +6,6 @@
 
 use std::default::Default;
 use std::hash::Hasher;
-use std::num::wrapping::WrappingOps;
 
 /// A speedy hash algorithm for node ids and def ids. The hashmap in
 /// libcollections by default uses SipHash which isn't quite as speedy as we

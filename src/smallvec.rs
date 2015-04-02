@@ -170,7 +170,7 @@ pub trait SmallVec<T> : SmallVecPrivate<T> {
             let new_alloc: *mut T = mem::transmute(heap::allocate(mem::size_of::<T>() *
                                                                             new_cap,
                                                                   mem::min_align_of::<T>()));
-            ptr::copy_nonoverlapping(new_alloc, self.begin(), self.len());
+            ptr::copy_nonoverlapping(self.begin(), new_alloc, self.len());
 
             if self.spilled() {
                 heap::deallocate(self.mut_ptr() as *mut u8,
