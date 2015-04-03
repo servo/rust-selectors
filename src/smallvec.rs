@@ -488,7 +488,7 @@ macro_rules! def_small_vector(
 
                 unsafe {
                     let ptr = self.mut_ptr();
-                    for i in range(0, self.len()) {
+                    for i in 0 .. self.len() {
                         *ptr.offset(i as int) = mem::uninitialized();
                     }
 

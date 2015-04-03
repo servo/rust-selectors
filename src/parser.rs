@@ -6,16 +6,19 @@ use std::ascii::{AsciiExt, OwnedAsciiExt};
 use std::borrow::Cow;
 use std::cmp;
 use std::collections::HashMap;
+use std::collections::hash_state::DefaultState;
+use std::default::Default;
 use std::sync::Arc;
 
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
 
+use fnv::FnvHasher;
 
 pub struct ParserContext {
     pub in_user_agent_stylesheet: bool,
     pub default_namespace: Option<Namespace>,
-    pub namespace_prefixes: HashMap<String, Namespace>,
+    pub namespace_prefixes: HashMap<String, Namespace, DefaultState<FnvHasher>>,
 }
 
 impl ParserContext {
@@ -23,7 +26,7 @@ impl ParserContext {
         ParserContext {
             in_user_agent_stylesheet: false,
             default_namespace: None,
-            namespace_prefixes: HashMap::new(),
+            namespace_prefixes: HashMap::with_hash_state(Default::default()),
         }
     }
 }
@@ -80,6 +83,7 @@ pub enum SimpleSelector {
     Link,
     Visited,
     Hover,
+    Focus,
     Disabled,
     Enabled,
     Checked,
@@ -168,6 +172,7 @@ fn compute_specificity(mut selector: &CompoundSelector,
                 &SimpleSelector::AttrSuffixMatch(..) |
                 &SimpleSelector::AnyLink | &SimpleSelector::Link |
                 &SimpleSelector::Visited | &SimpleSelector::Hover |
+                &SimpleSelector::Focus |
                 &SimpleSelector::Disabled | &SimpleSelector::Enabled |
                 &SimpleSelector::FirstChild | &SimpleSelector::LastChild |
                 &SimpleSelector::OnlyChild | &SimpleSelector::Root |
@@ -607,6 +612,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         "link" => Ok(SimpleSelector::Link),
         "visited" => Ok(SimpleSelector::Visited),
         "hover" => Ok(SimpleSelector::Hover),
+        "focus" => Ok(SimpleSelector::Focus),
         "disabled" => Ok(SimpleSelector::Disabled),
         "enabled" => Ok(SimpleSelector::Enabled),
         "checked" => Ok(SimpleSelector::Checked),

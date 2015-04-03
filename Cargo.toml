@@ -15,7 +15,7 @@ bitflags = "0.1"
 matches = "0.1"
 
 [dev-dependencies]
-rand = "0.1"
+rand = "0.2.1"
 
 [dependencies.cssparser]
 git = "https://github.com/servo/rust-cssparser"

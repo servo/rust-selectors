@@ -5,6 +5,8 @@
 use std::ascii::AsciiExt;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::collections::hash_state::{DefaultState, HashState};
+use std::default::Default;
 use std::sync::Arc;
 
 use bloom::BloomFilter;
@@ -12,9 +14,10 @@ use smallvec::VecLike;
 use quicksort::quicksort_by;
 use string_cache::Atom;
 
-use tree::{TElement, TNode};
+use fnv::FnvHasher;
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector};
+use tree::{TElement, TNode};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -40,12 +43,12 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 /// node.
 pub struct SelectorMap<T> {
     // TODO: Tune the initial capacity of the HashMap
-    id_hash: HashMap<Atom, Vec<Rule<T>>>,
-    class_hash: HashMap<Atom, Vec<Rule<T>>>,
-    local_name_hash: HashMap<Atom, Vec<Rule<T>>>,
+    id_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
+    class_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
+    local_name_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
-    lower_local_name_hash: HashMap<Atom, Vec<Rule<T>>>,
+    lower_local_name_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
     // For Rules that don't have ID, class, or element selectors.
     universal_rules: Vec<Rule<T>>,
     /// Whether this hash is empty.
@@ -55,10 +58,10 @@ pub struct SelectorMap<T> {
 impl<T> SelectorMap<T> {
     pub fn new() -> SelectorMap<T> {
         SelectorMap {
-            id_hash: HashMap::new(),
-            class_hash: HashMap::new(),
-            local_name_hash: HashMap::new(),
-            lower_local_name_hash: HashMap::new(),
+            id_hash: HashMap::with_hash_state(Default::default()),
+            class_hash: HashMap::with_hash_state(Default::default()),
+            local_name_hash: HashMap::with_hash_state(Default::default()),
+            lower_local_name_hash: HashMap::with_hash_state(Default::default()),
             universal_rules: vec!(),
             empty: true,
         }
@@ -131,7 +134,9 @@ impl<T> SelectorMap<T> {
 
     fn get_matching_rules_from_hash<'a,N,V>(node: &N,
                                             parent_bf: &Option<Box<BloomFilter>>,
-                                            hash: &HashMap<Atom, Vec<Rule<T>>>,
+                                            hash: &HashMap<Atom,
+                                                           Vec<Rule<T>>,
+                                                           DefaultState<FnvHasher>>,
                                             key: &Atom,
                                             matching_rules: &mut V,
                                             shareable: &mut bool)
@@ -681,11 +686,17 @@ pub fn matches_simple_selector<'a,N>(selector: &SimpleSelector,
                 None => false,
             }
         }
-
+        // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
         SimpleSelector::Hover => {
             *shareable = false;
             let elem = element.as_element();
             elem.get_hover_state()
+        },
+        // https://html.spec.whatwg.org/multipage/scripting.html#selector-focus
+        SimpleSelector::Focus => {
+            *shareable = false;
+            let elem = element.as_element();
+            elem.get_focus_state()
         },
         // http://www.whatwg.org/html/#selector-disabled
         SimpleSelector::Disabled => {
@@ -888,7 +899,9 @@ fn matches_last_child<'a,N>(element: &N) -> bool where N: TNode<'a> {
     }
 }
 
-fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>>, key: Atom, value: Rule<T>) {
+fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
+                key: Atom,
+                value: Rule<T>) {
     match map.get_mut(&key) {
         Some(vec) => {
             vec.push(value);

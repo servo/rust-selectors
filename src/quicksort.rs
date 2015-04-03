@@ -90,12 +90,12 @@ pub mod test {
     #[test]
     pub fn random() {
         let mut rng = rand::thread_rng();
-        for _ in range(0u32, 50000u32) {
+        for _ in 0u32 .. 50000u32 {
             let len: uint = rng.gen();
             let mut v: Vec<int> = rng.gen_iter::<int>().take((len % 32) + 1).collect();
             fn compare_ints(a: &int, b: &int) -> Ordering { a.cmp(b) }
             quicksort_by(v.as_mut_slice(), compare_ints);
-            for i in range(0, v.len() - 1) {
+            for i in 0 .. v.len() - 1 {
                 assert!(v[i] <= v[i + 1])
             }
         }
