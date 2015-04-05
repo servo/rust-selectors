@@ -11,11 +11,11 @@
 #[macro_use] extern crate matches;
 #[cfg(test)] extern crate rand;
 extern crate string_cache;
+extern crate quicksort;
 
 pub mod bloom;
 pub mod fnv;
 pub mod matching;
 pub mod parser;
-pub mod quicksort;
 pub mod smallvec;
 pub mod tree;
