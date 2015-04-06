@@ -83,7 +83,7 @@ impl<T> SelectorMap<T> {
         }
 
         // At the end, we're going to sort the rules that we added, so remember where we began.
-        let init_len = matching_rules_list.vec_len();
+        let init_len = matching_rules_list.len();
         let element = node.as_element();
         match element.get_id() {
             Some(id) => {
@@ -125,7 +125,7 @@ impl<T> SelectorMap<T> {
                                         shareable);
 
         // Sort only the rules we just added.
-        quicksort_by(matching_rules_list.vec_slice_from_mut(init_len), compare);
+        quicksort_by(&mut matching_rules_list[init_len..], compare);
 
         fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
             (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
@@ -164,7 +164,7 @@ impl<T> SelectorMap<T> {
                                         V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, node, parent_bf, shareable) {
-                matching_rules.vec_push(rule.declarations.clone());
+                matching_rules.push(rule.declarations.clone());
             }
         }
     }
