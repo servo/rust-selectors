@@ -17,6 +17,7 @@ matches = "0.1"
 quicksort = "1.0"
 cssparser = "0.3"
 smallvec = "0.1"
+fnv = "1.0"
 
 [dev-dependencies]
 rand = "0.3"

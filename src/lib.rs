@@ -13,9 +13,9 @@
 extern crate string_cache;
 extern crate quicksort;
 extern crate smallvec;
+extern crate fnv;
 
 pub mod bloom;
-pub mod fnv;
 pub mod matching;
 pub mod parser;
 pub mod tree;
