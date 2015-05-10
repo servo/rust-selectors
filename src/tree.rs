@@ -37,8 +37,6 @@ pub trait TNode<'a>: Clone + Copy {
 }
 
 pub trait TElement<'a>: Copy {
-    fn get_attr(self, namespace: &Namespace, attr: &Atom) -> Option<&'a str>;
-    fn get_attrs(self, attr: &Atom) -> Vec<&'a str>;
     fn get_link(self) -> Option<&'a str>;
     fn get_local_name(self) -> &'a Atom;
     fn get_namespace(self) -> &'a Namespace;
