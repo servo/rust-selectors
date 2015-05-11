@@ -37,7 +37,6 @@ pub trait TNode<'a>: Clone + Copy {
 }
 
 pub trait TElement<'a>: Copy {
-    fn get_link(self) -> Option<&'a str>;
     fn get_local_name(self) -> &'a Atom;
     fn get_namespace(self) -> &'a Namespace;
     fn get_hover_state(self) -> bool;
@@ -49,6 +48,12 @@ pub trait TElement<'a>: Copy {
     fn get_indeterminate_state(self) -> bool;
     fn has_class(self, name: &Atom) -> bool;
     fn has_nonzero_border(self) -> bool;
+    /// Returns whether this element matches either `:link` or `:visited`.
+    fn is_link(self) -> bool;
+    /// Returns whether this element matches `:visited`.
+    fn is_visited_link(self) -> bool;
+    /// Returns whether this element matches `:link`.
+    fn is_unvisited_link(self) -> bool;
 
     // Ordinarily I wouldn't use callbacks like this, but the alternative is
     // really messy, since there is a `JSRef` and a `RefCell` involved. Maybe
