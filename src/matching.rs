@@ -668,23 +668,15 @@ pub fn matches_simple_selector<'a,N>(selector: &SimpleSelector,
         SimpleSelector::AnyLink => {
             *shareable = false;
             let element = element.as_element();
-            element.get_link().is_some()
+            element.is_link()
         }
         SimpleSelector::Link => {
             let elem = element.as_element();
-            match elem.get_link() {
-                Some(url) => !url_is_visited(url),
-                None => false,
-            }
+            elem.is_unvisited_link()
         }
         SimpleSelector::Visited => {
-            // NB(pcwalton): When we actually start supporting visited links, remember to update
-            // `can_share_style_with`.
             let elem = element.as_element();
-            match elem.get_link() {
-                Some(url) => url_is_visited(url),
-                None => false,
-            }
+            elem.is_visited_link()
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
         SimpleSelector::Hover => {
@@ -782,15 +774,6 @@ pub fn matches_simple_selector<'a,N>(selector: &SimpleSelector,
             !negated.iter().all(|s| matches_simple_selector(s, element, shareable))
         },
     }
-}
-
-#[inline]
-fn url_is_visited(_url: &str) -> bool {
-    // FIXME: implement this.
-    // This function will probably need to take a "session"
-    // or something containing browsing history as an additional parameter.
-    // NB(pcwalton): When you implement this, remember to update `can_share_style_with`!
-    false
 }
 
 #[inline]
