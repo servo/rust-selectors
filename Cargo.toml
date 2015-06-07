@@ -3,6 +3,7 @@
 name = "selectors"
 version = "0.1.0"
 authors = ["Simon Sapin <simon.sapin@exyr.org>"]
+documentation = "http://doc.servo.org/selectors/"
 
 description = "CSS Selectors matching for Rust"
 repository = "https://github.com/servo/rust-selectors"
