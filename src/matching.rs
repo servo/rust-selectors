@@ -71,13 +71,13 @@ impl<T> SelectorMap<T> {
     ///
     /// Extract matching rules as per node's ID, classes, tag name, etc..
     /// Sort the Rules at the end to maintain cascading order.
-    pub fn get_all_matching_rules<'a,N,V>(&self,
-                                          node: &N,
-                                          parent_bf: &Option<Box<BloomFilter>>,
-                                          matching_rules_list: &mut V,
-                                          shareable: &mut bool)
-                                          where N: TNode<'a>,
-                                                V: VecLike<DeclarationBlock<T>> {
+    pub fn get_all_matching_rules<N,V>(&self,
+                                       node: &N,
+                                       parent_bf: &Option<Box<BloomFilter>>,
+                                       matching_rules_list: &mut V,
+                                       shareable: &mut bool)
+                                       where N: TNode,
+                                             V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
         }
@@ -132,16 +132,16 @@ impl<T> SelectorMap<T> {
         }
     }
 
-    fn get_matching_rules_from_hash<'a,N,V>(node: &N,
-                                            parent_bf: &Option<Box<BloomFilter>>,
-                                            hash: &HashMap<Atom,
-                                                           Vec<Rule<T>>,
-                                                           DefaultState<FnvHasher>>,
-                                            key: &Atom,
-                                            matching_rules: &mut V,
-                                            shareable: &mut bool)
-                                            where N: TNode<'a>,
-                                                  V: VecLike<DeclarationBlock<T>> {
+    fn get_matching_rules_from_hash<N,V>(node: &N,
+                                         parent_bf: &Option<Box<BloomFilter>>,
+                                         hash: &HashMap<Atom,
+                                                        Vec<Rule<T>>,
+                                                        DefaultState<FnvHasher>>,
+                                         key: &Atom,
+                                         matching_rules: &mut V,
+                                         shareable: &mut bool)
+                                         where N: TNode,
+                                               V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
                 SelectorMap::get_matching_rules(node,
@@ -155,13 +155,13 @@ impl<T> SelectorMap<T> {
     }
 
     /// Adds rules in `rules` that match `node` to the `matching_rules` list.
-    fn get_matching_rules<'a,N,V>(node: &N,
-                                  parent_bf: &Option<Box<BloomFilter>>,
-                                  rules: &[Rule<T>],
-                                  matching_rules: &mut V,
-                                  shareable: &mut bool)
-                                  where N: TNode<'a>,
-                                        V: VecLike<DeclarationBlock<T>> {
+    fn get_matching_rules<N,V>(node: &N,
+                               parent_bf: &Option<Box<BloomFilter>>,
+                               rules: &[Rule<T>],
+                               matching_rules: &mut V,
+                               shareable: &mut bool)
+                               where N: TNode,
+                                     V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, node, parent_bf, shareable) {
                 matching_rules.push(rule.declarations.clone());
@@ -300,11 +300,11 @@ impl<T> DeclarationBlock<T> {
     }
 }
 
-pub fn matches<'a,N>(selector_list: &Vec<Selector>,
-                     element: &N,
-                     parent_bf: &Option<Box<BloomFilter>>)
-                     -> bool
-                     where N: TNode<'a> {
+pub fn matches<N>(selector_list: &Vec<Selector>,
+                  element: &N,
+                  parent_bf: &Option<Box<BloomFilter>>)
+                  -> bool
+                  where N: TNode {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
         matches_compound_selector(&*selector.compound_selectors, element, parent_bf, &mut false)
@@ -317,12 +317,12 @@ pub fn matches<'a,N>(selector_list: &Vec<Selector>,
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
 /// will almost certainly break as nodes will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
-fn matches_compound_selector<'a,N>(selector: &CompoundSelector,
-                                   element: &N,
-                                   parent_bf: &Option<Box<BloomFilter>>,
-                                   shareable: &mut bool)
-                                   -> bool
-                                   where N: TNode<'a> {
+fn matches_compound_selector<N>(selector: &CompoundSelector,
+                                element: &N,
+                                parent_bf: &Option<Box<BloomFilter>>,
+                                shareable: &mut bool)
+                                -> bool
+                                where N: TNode {
     match matches_compound_selector_internal(selector, element, parent_bf, shareable) {
         SelectorMatchingResult::Matched => true,
         _ => false
@@ -382,12 +382,12 @@ enum SelectorMatchingResult {
 /// Quickly figures out whether or not the compound selector is worth doing more
 /// work on. If the simple selectors don't match, or there's a child selector
 /// that does not appear in the bloom parent bloom filter, we can exit early.
-fn can_fast_reject<'a,N>(mut selector: &CompoundSelector,
-                         element: &N,
-                         parent_bf: &Option<Box<BloomFilter>>,
-                         shareable: &mut bool)
-                         -> Option<SelectorMatchingResult>
-                         where N: TNode<'a> {
+fn can_fast_reject<N>(mut selector: &CompoundSelector,
+                      element: &N,
+                      parent_bf: &Option<Box<BloomFilter>>,
+                      shareable: &mut bool)
+                      -> Option<SelectorMatchingResult>
+                      where N: TNode {
     if !selector.simple_selectors.iter().all(|simple_selector| {
       matches_simple_selector(simple_selector, element, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
@@ -443,12 +443,12 @@ fn can_fast_reject<'a,N>(mut selector: &CompoundSelector,
     return None;
 }
 
-fn matches_compound_selector_internal<'a,N>(selector: &CompoundSelector,
-                                            element: &N,
-                                            parent_bf: &Option<Box<BloomFilter>>,
-                                            shareable: &mut bool)
-                                            -> SelectorMatchingResult
-                                            where N: TNode<'a> {
+fn matches_compound_selector_internal<N>(selector: &CompoundSelector,
+                                         element: &N,
+                                         parent_bf: &Option<Box<BloomFilter>>,
+                                         shareable: &mut bool)
+                                         -> SelectorMatchingResult
+                                         where N: TNode {
     match can_fast_reject(selector, element, parent_bf, shareable) {
         None => {},
         Some(result) => return result,
@@ -572,11 +572,11 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 /// will almost certainly break as nodes will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<'a,N>(selector: &SimpleSelector,
-                                     element: &N,
-                                     shareable: &mut bool)
-                                     -> bool
-                                     where N: TNode<'a> {
+pub fn matches_simple_selector<N>(selector: &SimpleSelector,
+                                  element: &N,
+                                  shareable: &mut bool)
+                                  -> bool
+                                  where N: TNode {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
@@ -766,7 +766,7 @@ pub fn matches_simple_selector<'a,N>(selector: &SimpleSelector,
         SimpleSelector::ServoNonzeroBorder => {
             *shareable = false;
             let elem = element.as_element();
-            elem.has_nonzero_border()
+            elem.has_servo_nonzero_border()
         }
 
         SimpleSelector::Negation(ref negated) => {
@@ -777,13 +777,13 @@ pub fn matches_simple_selector<'a,N>(selector: &SimpleSelector,
 }
 
 #[inline]
-fn matches_generic_nth_child<'a,N>(element: &N,
-                                   a: i32,
-                                   b: i32,
-                                   is_of_type: bool,
-                                   is_from_end: bool)
-                                   -> bool
-                                   where N: TNode<'a> {
+fn matches_generic_nth_child<N>(element: &N,
+                                a: i32,
+                                b: i32,
+                                is_of_type: bool,
+                                is_from_end: bool)
+                                -> bool
+                                where N: TNode {
     let mut node = element.clone();
     // fail if we can't find a parent or if the node is the root element
     // of the document (Cf. Selectors Level 3)
@@ -831,7 +831,7 @@ fn matches_generic_nth_child<'a,N>(element: &N,
 }
 
 #[inline]
-fn matches_root<'a,N>(element: &N) -> bool where N: TNode<'a> {
+fn matches_root<N>(element: &N) -> bool where N: TNode {
     match element.parent_node() {
         Some(parent) => parent.is_document(),
         None => false
@@ -839,7 +839,7 @@ fn matches_root<'a,N>(element: &N) -> bool where N: TNode<'a> {
 }
 
 #[inline]
-fn matches_first_child<'a,N>(element: &N) -> bool where N: TNode<'a> {
+fn matches_first_child<N>(element: &N) -> bool where N: TNode {
     let mut node = element.clone();
     loop {
         match node.prev_sibling() {
@@ -861,7 +861,7 @@ fn matches_first_child<'a,N>(element: &N) -> bool where N: TNode<'a> {
 }
 
 #[inline]
-fn matches_last_child<'a,N>(element: &N) -> bool where N: TNode<'a> {
+fn matches_last_child<N>(element: &N) -> bool where N: TNode {
     let mut node = element.clone();
     loop {
         match node.next_sibling() {
