@@ -22,18 +22,6 @@ pub trait TNode: Clone {
     fn as_element(&self) -> Self::Element;
     fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
     fn is_html_element_in_html_document(&self) -> bool;
-
-    fn has_changed(&self) -> bool;
-    unsafe fn set_changed(&self, value: bool);
-
-    fn is_dirty(&self) -> bool;
-    unsafe fn set_dirty(&self, value: bool);
-
-    fn has_dirty_siblings(&self) -> bool;
-    unsafe fn set_dirty_siblings(&self, value: bool);
-
-    fn has_dirty_descendants(&self) -> bool;
-    unsafe fn set_dirty_descendants(&self, value: bool);
 }
 
 pub trait TElement {
