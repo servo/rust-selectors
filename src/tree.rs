@@ -35,13 +35,28 @@ pub trait TElement {
     fn get_checked_state(&self) -> bool;
     fn get_indeterminate_state(&self) -> bool;
     fn has_class(&self, name: &Atom) -> bool;
-    fn has_nonzero_border(&self) -> bool;
-    /// Returns whether this element matches either `:link` or `:visited`.
+
+
+    /// Returns whether this element matches `:-servo-nonzero-border`,
+    /// which is only parsed when ParserContext::in_user_agent_stylesheet is true.
+    /// It is an implementation detail of Servo for "only if border is not equivalent to zero":
+    /// https://html.spec.whatwg.org/multipage/#magic-border-selector
+    ///
+    /// Feel free to ignore this outside of Servo and keep the default implement, always `false`.
+    fn has_servo_nonzero_border(&self) -> bool { false }
+
+    /// Returns whether this element matches `:any-link`.
     fn is_link(&self) -> bool;
+
     /// Returns whether this element matches `:visited`.
-    fn is_visited_link(&self) -> bool;
-    /// Returns whether this element matches `:link`.
-    fn is_unvisited_link(&self) -> bool;
+    ///
+    /// Defaults to `false`: when browsing history is not recorded, no links are ever "visited".
+    fn is_visited_link(&self) -> bool { false }
+
+    /// Returns whether this element matches `:link` (which is exclusive with `:visited`).
+    ///
+    /// Defaults to `is_link()`: when browsing history is not recorded, all links are "unvisited".
+    fn is_unvisited_link(&self) -> bool { self.is_link() }
 
     // Ordinarily I wouldn't use callbacks like this, but the alternative is
     // really messy, since there is a `JSRef` and a `RefCell` involved. Maybe

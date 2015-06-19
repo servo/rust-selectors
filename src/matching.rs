@@ -766,7 +766,7 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
         SimpleSelector::ServoNonzeroBorder => {
             *shareable = false;
             let elem = element.as_element();
-            elem.has_nonzero_border()
+            elem.has_servo_nonzero_border()
         }
 
         SimpleSelector::Negation(ref negated) => {
