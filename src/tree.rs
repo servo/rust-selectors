@@ -19,7 +19,7 @@ pub trait TNode: Clone {
     fn next_sibling(&self) -> Option<Self>;
     fn is_document(&self) -> bool;
     fn is_element(&self) -> bool;
-    fn as_element(&self) -> Self::Element;
+    fn as_element(&self) -> Option<Self::Element>;
     fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
     fn is_html_element_in_html_document(&self) -> bool;
 }

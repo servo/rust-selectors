@@ -84,7 +84,11 @@ impl<T> SelectorMap<T> {
 
         // At the end, we're going to sort the rules that we added, so remember where we began.
         let init_len = matching_rules_list.len();
-        let element = node.as_element();
+        let element = match node.as_element() {
+            Some(e) => e,
+            None => return,
+        };
+
         match element.get_id() {
             Some(id) => {
                 SelectorMap::get_matching_rules_from_hash(node,
@@ -579,26 +583,31 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
                                   where N: TNode {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
-            let name = if element.is_html_element_in_html_document() { lower_name } else { name };
-            let element = element.as_element();
-            element.get_local_name() == name
+            element.as_element()
+                   .map_or(false, |e| {
+                       let name = if element.is_html_element_in_html_document() {
+                            lower_name
+                        } else {
+                             name
+                        };
+                       e.get_local_name() == name
+                   })
         }
 
         SimpleSelector::Namespace(ref namespace) => {
-            let element = element.as_element();
-            element.get_namespace() == namespace
+            element.as_element()
+                   .map_or(false, |e| e.get_namespace() == namespace)
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
             *shareable = false;
-            let element = element.as_element();
-            element.get_id().map_or(false, |attr| {
-                attr == *id
-            })
+            element.as_element()
+                   .and_then(|e| e.get_id())
+                   .map_or(false, |attr| attr == *id)
         }
         SimpleSelector::Class(ref class) => {
-            let element = element.as_element();
-            element.has_class(class)
+            element.as_element()
+                   .map_or(false, |e| e.has_class(class))
         }
 
         SimpleSelector::AttrExists(ref attr) => {
@@ -667,52 +676,53 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
 
         SimpleSelector::AnyLink => {
             *shareable = false;
-            let element = element.as_element();
-            element.is_link()
+            element.as_element()
+                   .map_or(false, |e| e.is_link())
         }
         SimpleSelector::Link => {
-            let elem = element.as_element();
-            elem.is_unvisited_link()
+            element.as_element()
+                   .map(|e| e.is_unvisited_link())
+                   .unwrap_or(false)
         }
         SimpleSelector::Visited => {
-            let elem = element.as_element();
-            elem.is_visited_link()
+            element.as_element()
+                   .map_or(false, |e| e.is_visited_link())
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
         SimpleSelector::Hover => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_hover_state()
+            element.as_element()
+                   .map_or(false, |e| e.get_hover_state())
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-focus
         SimpleSelector::Focus => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_focus_state()
+            element.as_element()
+                   .map_or(false, |e| e.get_focus_state())
         },
         // http://www.whatwg.org/html/#selector-disabled
         SimpleSelector::Disabled => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_disabled_state()
+            element.as_element()
+                   .map_or(false, |e| e.get_disabled_state())
         },
         // http://www.whatwg.org/html/#selector-enabled
         SimpleSelector::Enabled => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_enabled_state()
+            element.as_element()
+                   .map_or(false, |e| e.get_enabled_state())
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-checked
         SimpleSelector::Checked => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_checked_state()
+            element.as_element()
+                   .map_or(false, |e| e.get_checked_state())
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-indeterminate
         SimpleSelector::Indeterminate => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_indeterminate_state()
+            element.as_element()
+                   .map_or(false, |e| e.get_indeterminate_state())
         }
         SimpleSelector::FirstChild => {
             *shareable = false;
@@ -765,8 +775,8 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
 
         SimpleSelector::ServoNonzeroBorder => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.has_servo_nonzero_border()
+            element.as_element()
+                   .map_or(false, |e| e.has_servo_nonzero_border())
         }
 
         SimpleSelector::Negation(ref negated) => {
@@ -810,11 +820,10 @@ fn matches_generic_nth_child<N>(element: &N,
 
         if node.is_element() {
             if is_of_type {
-                let element = element.as_element();
-                let node = node.as_element();
-                if element.get_local_name() == node.get_local_name() &&
-                    element.get_namespace() == node.get_namespace() {
-                    index += 1;
+                if let (Some(e), Some(n)) = (element.as_element(), node.as_element()) {
+                    if e.get_local_name() == n.get_local_name() && e.get_namespace() == n.get_namespace() {
+                        index += 1;
+                    }
                 }
             } else {
               index += 1;
