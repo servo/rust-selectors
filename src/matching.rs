@@ -17,7 +17,7 @@ use string_cache::Atom;
 use fnv::FnvHasher;
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector};
-use tree::{TElement, TNode};
+use tree::{Element, Node};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -76,7 +76,7 @@ impl<T> SelectorMap<T> {
                                        parent_bf: &Option<Box<BloomFilter>>,
                                        matching_rules_list: &mut V,
                                        shareable: &mut bool)
-                                       where N: TNode,
+                                       where N: Node,
                                              V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
@@ -140,7 +140,7 @@ impl<T> SelectorMap<T> {
                                          key: &Atom,
                                          matching_rules: &mut V,
                                          shareable: &mut bool)
-                                         where N: TNode,
+                                         where N: Node,
                                                V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
@@ -160,7 +160,7 @@ impl<T> SelectorMap<T> {
                                rules: &[Rule<T>],
                                matching_rules: &mut V,
                                shareable: &mut bool)
-                               where N: TNode,
+                               where N: Node,
                                      V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, node, parent_bf, shareable) {
@@ -304,7 +304,7 @@ pub fn matches<N>(selector_list: &Vec<Selector>,
                   node: &N,
                   parent_bf: &Option<Box<BloomFilter>>)
                   -> bool
-                  where N: TNode {
+                  where N: Node {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
         matches_compound_selector(&*selector.compound_selectors, node, parent_bf, &mut false)
@@ -322,7 +322,7 @@ fn matches_compound_selector<N>(selector: &CompoundSelector,
                                 parent_bf: &Option<Box<BloomFilter>>,
                                 shareable: &mut bool)
                                 -> bool
-                                where N: TNode {
+                                where N: Node {
     match matches_compound_selector_internal(selector, node, parent_bf, shareable) {
         SelectorMatchingResult::Matched => true,
         _ => false
@@ -387,7 +387,7 @@ fn can_fast_reject<N>(mut selector: &CompoundSelector,
                       parent_bf: &Option<Box<BloomFilter>>,
                       shareable: &mut bool)
                       -> Option<SelectorMatchingResult>
-                      where N: TNode {
+                      where N: Node {
     if !selector.simple_selectors.iter().all(|simple_selector| {
       matches_simple_selector(simple_selector, node, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
@@ -448,7 +448,7 @@ fn matches_compound_selector_internal<N>(selector: &CompoundSelector,
                                          parent_bf: &Option<Box<BloomFilter>>,
                                          shareable: &mut bool)
                                          -> SelectorMatchingResult
-                                         where N: TNode {
+                                         where N: Node {
     match can_fast_reject(selector, node, parent_bf, shareable) {
         None => {},
         Some(result) => return result,
@@ -576,7 +576,7 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
                                   node: &N,
                                   shareable: &mut bool)
                                   -> bool
-                                  where N: TNode {
+                                  where N: Node {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let element = node.as_element();
@@ -790,7 +790,7 @@ fn matches_generic_nth_child<N>(node: &N,
                                 is_of_type: bool,
                                 is_from_end: bool)
                                 -> bool
-                                where N: TNode {
+                                where N: Node {
     // fail if we can't find a parent or if the node is the root element
     // of the document (Cf. Selectors Level 3)
     match node.parent_node() {
@@ -838,7 +838,7 @@ fn matches_generic_nth_child<N>(node: &N,
 }
 
 #[inline]
-fn matches_root<N>(node: &N) -> bool where N: TNode {
+fn matches_root<N>(node: &N) -> bool where N: Node {
     match node.parent_node() {
         Some(parent) => parent.is_document(),
         None => false
@@ -846,7 +846,7 @@ fn matches_root<N>(node: &N) -> bool where N: TNode {
 }
 
 #[inline]
-fn matches_first_child<N>(node: &N) -> bool where N: TNode {
+fn matches_first_child<N>(node: &N) -> bool where N: Node {
     let mut node = node.clone();
     loop {
         match node.prev_sibling() {
@@ -868,7 +868,7 @@ fn matches_first_child<N>(node: &N) -> bool where N: TNode {
 }
 
 #[inline]
-fn matches_last_child<N>(node: &N) -> bool where N: TNode {
+fn matches_last_child<N>(node: &N) -> bool where N: Node {
     let mut node = node.clone();
     loop {
         match node.next_sibling() {
