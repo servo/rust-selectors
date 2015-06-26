@@ -106,7 +106,7 @@ impl<T> SelectorMap<T> {
                                                       shareable);
         });
 
-        let local_name_hash = if node.is_html_element_in_html_document() {
+        let local_name_hash = if element.is_html_element_in_html_document() {
             &self.lower_local_name_hash
         } else {
             &self.local_name_hash
@@ -579,8 +579,8 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
                                   where N: TNode {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
-            let name = if element.is_html_element_in_html_document() { lower_name } else { name };
             let element = element.as_element();
+            let name = if element.is_html_element_in_html_document() { lower_name } else { name };
             element.get_local_name() == name
         }
 

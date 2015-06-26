@@ -20,10 +20,10 @@ pub trait TNode: Clone {
     fn is_document(&self) -> bool;
     fn is_element(&self) -> bool;
     fn as_element(&self) -> Self::Element;
-    fn is_html_element_in_html_document(&self) -> bool;
 }
 
 pub trait TElement {
+    fn is_html_element_in_html_document(&self) -> bool;
     fn get_local_name<'a>(&'a self) -> &'a Atom;
     fn get_namespace<'a>(&'a self) -> &'a Namespace;
     fn get_hover_state(&self) -> bool;
