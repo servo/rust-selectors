@@ -612,6 +612,7 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
             }) {
                 *shareable = false;
             }
+            let element = element.as_element();
             element.match_attr(attr, |_| true)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
@@ -626,6 +627,7 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
                 // here because the UA style otherwise disables all style sharing completely.
                 *shareable = false
             }
+            let element = element.as_element();
             element.match_attr(attr, |attr_value| {
                 match case_sensitivity {
                     CaseSensitivity::CaseSensitive => attr_value == *value,
@@ -635,12 +637,14 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
         }
         SimpleSelector::AttrIncludes(ref attr, ref value) => {
             *shareable = false;
+            let element = element.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.split(SELECTOR_WHITESPACE).any(|v| v == *value)
             })
         }
         SimpleSelector::AttrDashMatch(ref attr, ref value, ref dashing_value) => {
             *shareable = false;
+            let element = element.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value == *value ||
                 attr_value.starts_with(dashing_value)
@@ -648,18 +652,21 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
         }
         SimpleSelector::AttrPrefixMatch(ref attr, ref value) => {
             *shareable = false;
+            let element = element.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.starts_with(value)
             })
         }
         SimpleSelector::AttrSubstringMatch(ref attr, ref value) => {
             *shareable = false;
+            let element = element.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.contains(value)
             })
         }
         SimpleSelector::AttrSuffixMatch(ref attr, ref value) => {
             *shareable = false;
+            let element = element.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.ends_with(value)
             })

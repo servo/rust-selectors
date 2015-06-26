@@ -20,7 +20,6 @@ pub trait TNode: Clone {
     fn is_document(&self) -> bool;
     fn is_element(&self) -> bool;
     fn as_element(&self) -> Self::Element;
-    fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
     fn is_html_element_in_html_document(&self) -> bool;
 }
 
@@ -35,6 +34,7 @@ pub trait TElement {
     fn get_checked_state(&self) -> bool;
     fn get_indeterminate_state(&self) -> bool;
     fn has_class(&self, name: &Atom) -> bool;
+    fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
 
 
     /// Returns whether this element matches `:-servo-nonzero-border`,
