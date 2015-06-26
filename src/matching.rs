@@ -301,13 +301,13 @@ impl<T> DeclarationBlock<T> {
 }
 
 pub fn matches<N>(selector_list: &Vec<Selector>,
-                  element: &N,
+                  node: &N,
                   parent_bf: &Option<Box<BloomFilter>>)
                   -> bool
                   where N: TNode {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
-        matches_compound_selector(&*selector.compound_selectors, element, parent_bf, &mut false)
+        matches_compound_selector(&*selector.compound_selectors, node, parent_bf, &mut false)
     })
 }
 
@@ -318,12 +318,12 @@ pub fn matches<N>(selector_list: &Vec<Selector>,
 /// will almost certainly break as nodes will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
 fn matches_compound_selector<N>(selector: &CompoundSelector,
-                                element: &N,
+                                node: &N,
                                 parent_bf: &Option<Box<BloomFilter>>,
                                 shareable: &mut bool)
                                 -> bool
                                 where N: TNode {
-    match matches_compound_selector_internal(selector, element, parent_bf, shareable) {
+    match matches_compound_selector_internal(selector, node, parent_bf, shareable) {
         SelectorMatchingResult::Matched => true,
         _ => false
     }
@@ -383,13 +383,13 @@ enum SelectorMatchingResult {
 /// work on. If the simple selectors don't match, or there's a child selector
 /// that does not appear in the bloom parent bloom filter, we can exit early.
 fn can_fast_reject<N>(mut selector: &CompoundSelector,
-                      element: &N,
+                      node: &N,
                       parent_bf: &Option<Box<BloomFilter>>,
                       shareable: &mut bool)
                       -> Option<SelectorMatchingResult>
                       where N: TNode {
     if !selector.simple_selectors.iter().all(|simple_selector| {
-      matches_simple_selector(simple_selector, element, shareable) }) {
+      matches_simple_selector(simple_selector, node, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
     }
 
@@ -444,12 +444,12 @@ fn can_fast_reject<N>(mut selector: &CompoundSelector,
 }
 
 fn matches_compound_selector_internal<N>(selector: &CompoundSelector,
-                                         element: &N,
+                                         node: &N,
                                          parent_bf: &Option<Box<BloomFilter>>,
                                          shareable: &mut bool)
                                          -> SelectorMatchingResult
                                          where N: TNode {
-    match can_fast_reject(selector, element, parent_bf, shareable) {
+    match can_fast_reject(selector, node, parent_bf, shareable) {
         None => {},
         Some(result) => return result,
     };
@@ -463,7 +463,7 @@ fn matches_compound_selector_internal<N>(selector: &CompoundSelector,
                 Combinator::NextSibling => (true, SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant),
                 Combinator::LaterSibling => (true, SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant),
             };
-            let mut node = (*element).clone();
+            let mut node = node.clone();
             loop {
                 let next_node = if siblings {
                     node.prev_sibling()
@@ -573,31 +573,31 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 /// `main/css/matching.rs`.)
 #[inline]
 pub fn matches_simple_selector<N>(selector: &SimpleSelector,
-                                  element: &N,
+                                  node: &N,
                                   shareable: &mut bool)
                                   -> bool
                                   where N: TNode {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
-            let element = element.as_element();
+            let element = node.as_element();
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
             element.get_local_name() == name
         }
 
         SimpleSelector::Namespace(ref namespace) => {
-            let element = element.as_element();
+            let element = node.as_element();
             element.get_namespace() == namespace
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
             *shareable = false;
-            let element = element.as_element();
+            let element = node.as_element();
             element.get_id().map_or(false, |attr| {
                 attr == *id
             })
         }
         SimpleSelector::Class(ref class) => {
-            let element = element.as_element();
+            let element = node.as_element();
             element.has_class(class)
         }
 
@@ -612,7 +612,7 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
             }) {
                 *shareable = false;
             }
-            let element = element.as_element();
+            let element = node.as_element();
             element.match_attr(attr, |_| true)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
@@ -627,7 +627,7 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
                 // here because the UA style otherwise disables all style sharing completely.
                 *shareable = false
             }
-            let element = element.as_element();
+            let element = node.as_element();
             element.match_attr(attr, |attr_value| {
                 match case_sensitivity {
                     CaseSensitivity::CaseSensitive => attr_value == *value,
@@ -637,14 +637,14 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
         }
         SimpleSelector::AttrIncludes(ref attr, ref value) => {
             *shareable = false;
-            let element = element.as_element();
+            let element = node.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.split(SELECTOR_WHITESPACE).any(|v| v == *value)
             })
         }
         SimpleSelector::AttrDashMatch(ref attr, ref value, ref dashing_value) => {
             *shareable = false;
-            let element = element.as_element();
+            let element = node.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value == *value ||
                 attr_value.starts_with(dashing_value)
@@ -652,21 +652,21 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
         }
         SimpleSelector::AttrPrefixMatch(ref attr, ref value) => {
             *shareable = false;
-            let element = element.as_element();
+            let element = node.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.starts_with(value)
             })
         }
         SimpleSelector::AttrSubstringMatch(ref attr, ref value) => {
             *shareable = false;
-            let element = element.as_element();
+            let element = node.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.contains(value)
             })
         }
         SimpleSelector::AttrSuffixMatch(ref attr, ref value) => {
             *shareable = false;
-            let element = element.as_element();
+            let element = node.as_element();
             element.match_attr(attr, |attr_value| {
                 attr_value.ends_with(value)
             })
@@ -674,124 +674,123 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
 
         SimpleSelector::AnyLink => {
             *shareable = false;
-            let element = element.as_element();
+            let element = node.as_element();
             element.is_link()
         }
         SimpleSelector::Link => {
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.is_unvisited_link()
         }
         SimpleSelector::Visited => {
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.is_visited_link()
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
         SimpleSelector::Hover => {
             *shareable = false;
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.get_hover_state()
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-focus
         SimpleSelector::Focus => {
             *shareable = false;
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.get_focus_state()
         },
         // http://www.whatwg.org/html/#selector-disabled
         SimpleSelector::Disabled => {
             *shareable = false;
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.get_disabled_state()
         },
         // http://www.whatwg.org/html/#selector-enabled
         SimpleSelector::Enabled => {
             *shareable = false;
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.get_enabled_state()
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-checked
         SimpleSelector::Checked => {
             *shareable = false;
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.get_checked_state()
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-indeterminate
         SimpleSelector::Indeterminate => {
             *shareable = false;
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.get_indeterminate_state()
         }
         SimpleSelector::FirstChild => {
             *shareable = false;
-            matches_first_child(element)
+            matches_first_child(node)
         }
         SimpleSelector::LastChild => {
             *shareable = false;
-            matches_last_child(element)
+            matches_last_child(node)
         }
         SimpleSelector::OnlyChild => {
             *shareable = false;
-            matches_first_child(element) && matches_last_child(element)
+            matches_first_child(node) && matches_last_child(node)
         }
 
         SimpleSelector::Root => {
             *shareable = false;
-            matches_root(element)
+            matches_root(node)
         }
 
         SimpleSelector::NthChild(a, b) => {
             *shareable = false;
-            matches_generic_nth_child(element, a, b, false, false)
+            matches_generic_nth_child(node, a, b, false, false)
         }
         SimpleSelector::NthLastChild(a, b) => {
             *shareable = false;
-            matches_generic_nth_child(element, a, b, false, true)
+            matches_generic_nth_child(node, a, b, false, true)
         }
         SimpleSelector::NthOfType(a, b) => {
             *shareable = false;
-            matches_generic_nth_child(element, a, b, true, false)
+            matches_generic_nth_child(node, a, b, true, false)
         }
         SimpleSelector::NthLastOfType(a, b) => {
             *shareable = false;
-            matches_generic_nth_child(element, a, b, true, true)
+            matches_generic_nth_child(node, a, b, true, true)
         }
 
         SimpleSelector::FirstOfType => {
             *shareable = false;
-            matches_generic_nth_child(element, 0, 1, true, false)
+            matches_generic_nth_child(node, 0, 1, true, false)
         }
         SimpleSelector::LastOfType => {
             *shareable = false;
-            matches_generic_nth_child(element, 0, 1, true, true)
+            matches_generic_nth_child(node, 0, 1, true, true)
         }
         SimpleSelector::OnlyOfType => {
             *shareable = false;
-            matches_generic_nth_child(element, 0, 1, true, false) &&
-                matches_generic_nth_child(element, 0, 1, true, true)
+            matches_generic_nth_child(node, 0, 1, true, false) &&
+                matches_generic_nth_child(node, 0, 1, true, true)
         }
 
         SimpleSelector::ServoNonzeroBorder => {
             *shareable = false;
-            let elem = element.as_element();
+            let elem = node.as_element();
             elem.has_servo_nonzero_border()
         }
 
         SimpleSelector::Negation(ref negated) => {
             *shareable = false;
-            !negated.iter().all(|s| matches_simple_selector(s, element, shareable))
+            !negated.iter().all(|s| matches_simple_selector(s, node, shareable))
         },
     }
 }
 
 #[inline]
-fn matches_generic_nth_child<N>(element: &N,
+fn matches_generic_nth_child<N>(node: &N,
                                 a: i32,
                                 b: i32,
                                 is_of_type: bool,
                                 is_from_end: bool)
                                 -> bool
                                 where N: TNode {
-    let mut node = element.clone();
     // fail if we can't find a parent or if the node is the root element
     // of the document (Cf. Selectors Level 3)
     match node.parent_node() {
@@ -801,26 +800,27 @@ fn matches_generic_nth_child<N>(element: &N,
         None => return false
     };
 
+    let mut sibling = node.clone();
     let mut index = 1;
     loop {
         if is_from_end {
-            match node.next_sibling() {
+            match sibling.next_sibling() {
                 None => break,
-                Some(next_sibling) => node = next_sibling
+                Some(next_sibling) => sibling = next_sibling
             }
         } else {
-            match node.prev_sibling() {
+            match sibling.prev_sibling() {
                 None => break,
-                Some(prev_sibling) => node = prev_sibling
+                Some(prev_sibling) => sibling = prev_sibling
             }
         }
 
-        if node.is_element() {
+        if sibling.is_element() {
             if is_of_type {
-                let element = element.as_element();
-                let node = node.as_element();
-                if element.get_local_name() == node.get_local_name() &&
-                    element.get_namespace() == node.get_namespace() {
+                let element = node.as_element();
+                let sibling = sibling.as_element();
+                if element.get_local_name() == sibling.get_local_name() &&
+                    element.get_namespace() == sibling.get_namespace() {
                     index += 1;
                 }
             } else {
@@ -838,16 +838,16 @@ fn matches_generic_nth_child<N>(element: &N,
 }
 
 #[inline]
-fn matches_root<N>(element: &N) -> bool where N: TNode {
-    match element.parent_node() {
+fn matches_root<N>(node: &N) -> bool where N: TNode {
+    match node.parent_node() {
         Some(parent) => parent.is_document(),
         None => false
     }
 }
 
 #[inline]
-fn matches_first_child<N>(element: &N) -> bool where N: TNode {
-    let mut node = element.clone();
+fn matches_first_child<N>(node: &N) -> bool where N: TNode {
+    let mut node = node.clone();
     loop {
         match node.prev_sibling() {
             Some(prev_sibling) => {
@@ -868,8 +868,8 @@ fn matches_first_child<N>(element: &N) -> bool where N: TNode {
 }
 
 #[inline]
-fn matches_last_child<N>(element: &N) -> bool where N: TNode {
-    let mut node = element.clone();
+fn matches_last_child<N>(node: &N) -> bool where N: TNode {
+    let mut node = node.clone();
     loop {
         match node.next_sibling() {
             Some(next_sibling) => {
