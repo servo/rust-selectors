@@ -880,7 +880,6 @@ fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
 
 #[cfg(test)]
 mod tests {
-    use std::cmp::Ordering;
     use std::sync::Arc;
     use super::{DeclarationBlock, Rule, SelectorMap};
     use parser::LocalName;
@@ -914,7 +913,7 @@ mod tests {
         let rules_list = get_mock_rules(&["a.intro", "img.sidebar"]);
         let a = &rules_list[0][0].declarations;
         let b = &rules_list[1][0].declarations;
-        assert!((a.specificity, a.source_order).cmp(&(b.specificity, b.source_order)) == Ordering::Less,
+        assert!((a.specificity, a.source_order) < ((b.specificity, b.source_order)),
                 "The rule that comes later should win.");
     }
 
