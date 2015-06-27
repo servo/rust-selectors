@@ -84,16 +84,13 @@ impl<T> SelectorMap<T> {
 
         // At the end, we're going to sort the rules that we added, so remember where we began.
         let init_len = matching_rules_list.len();
-        match element.get_id() {
-            Some(id) => {
-                SelectorMap::get_matching_rules_from_hash(element,
-                                                          parent_bf,
-                                                          &self.id_hash,
-                                                          &id,
-                                                          matching_rules_list,
-                                                          shareable)
-            }
-            None => {}
+        if let Some(id) = element.get_id() {
+            SelectorMap::get_matching_rules_from_hash(element,
+                                                      parent_bf,
+                                                      &self.id_hash,
+                                                      &id,
+                                                      matching_rules_list,
+                                                      shareable)
         }
 
         element.each_class(|class| {
@@ -173,28 +170,20 @@ impl<T> SelectorMap<T> {
     pub fn insert(&mut self, rule: Rule<T>) {
         self.empty = false;
 
-        match SelectorMap::get_id_name(&rule) {
-            Some(id_name) => {
-                find_push(&mut self.id_hash, id_name, rule);
-                return;
-            }
-            None => {}
-        }
-        match SelectorMap::get_class_name(&rule) {
-            Some(class_name) => {
-                find_push(&mut self.class_hash, class_name, rule);
-                return;
-            }
-            None => {}
+        if let Some(id_name) = SelectorMap::get_id_name(&rule) {
+            find_push(&mut self.id_hash, id_name, rule);
+            return;
         }
 
-        match SelectorMap::get_local_name(&rule) {
-            Some(LocalName { name, lower_name }) => {
-                find_push(&mut self.local_name_hash, name, rule.clone());
-                find_push(&mut self.lower_local_name_hash, lower_name, rule);
-                return;
-            }
-            None => {}
+        if let Some(class_name) = SelectorMap::get_class_name(&rule) {
+            find_push(&mut self.class_hash, class_name, rule);
+            return;
+        }
+
+        if let Some(LocalName { name, lower_name }) = SelectorMap::get_local_name(&rule) {
+            find_push(&mut self.local_name_hash, name, rule.clone());
+            find_push(&mut self.lower_local_name_hash, lower_name, rule);
+            return;
         }
 
         self.universal_rules.push(rule);
@@ -448,10 +437,9 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector,
                                          shareable: &mut bool)
                                          -> SelectorMatchingResult
                                          where E: Element {
-    match can_fast_reject(selector, element, parent_bf, shareable) {
-        None => {},
-        Some(result) => return result,
-    };
+    if let Some(result) = can_fast_reject(selector, element, parent_bf, shareable) {
+        return result;
+    }
 
     match selector.next {
         None => SelectorMatchingResult::Matched,
@@ -772,9 +760,8 @@ fn matches_generic_nth_child<E>(element: &E,
     // fail if we can't find a parent or if the element is the root element
     // of the document (Cf. Selectors Level 3)
     match element.as_node().parent_node() {
-        Some(parent) => if parent.is_document() {
-            return false;
-        },
+        Some(ref parent) if parent.is_document() => return false,
+        Some(_) => (),
         None => return false
     };
 
@@ -815,10 +802,9 @@ fn matches_generic_nth_child<E>(element: &E,
 
 #[inline]
 fn matches_root<E>(element: &E) -> bool where E: Element {
-    match element.as_node().parent_node() {
-        Some(parent) => parent.is_document(),
-        None => false
-    }
+    element.as_node()
+           .parent_node()
+           .map_or(false, |parent| parent.is_document())
 }
 
 #[inline]
@@ -868,19 +854,15 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
 fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
                 key: Atom,
                 value: Rule<T>) {
-    match map.get_mut(&key) {
-        Some(vec) => {
-            vec.push(value);
-            return
-        }
-        None => {}
+    if let Some(vec) = map.get_mut(&key) {
+        vec.push(value);
+        return
     }
     map.insert(key, vec![value]);
 }
 
 #[cfg(test)]
 mod tests {
-    use std::cmp::Ordering;
     use std::sync::Arc;
     use super::{DeclarationBlock, Rule, SelectorMap};
     use parser::LocalName;
@@ -914,7 +896,7 @@ mod tests {
         let rules_list = get_mock_rules(&["a.intro", "img.sidebar"]);
         let a = &rules_list[0][0].declarations;
         let b = &rules_list[1][0].declarations;
-        assert!((a.specificity, a.source_order).cmp(&(b.specificity, b.source_order)) == Ordering::Less,
+        assert!((a.specificity, a.source_order) < ((b.specificity, b.source_order)),
                 "The rule that comes later should win.");
     }
 
