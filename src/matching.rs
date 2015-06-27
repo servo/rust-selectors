@@ -802,10 +802,9 @@ fn matches_generic_nth_child<E>(element: &E,
 
 #[inline]
 fn matches_root<E>(element: &E) -> bool where E: Element {
-    match element.as_node().parent_node() {
-        Some(parent) => parent.is_document(),
-        None => false
-    }
+    element.as_node()
+           .parent_node()
+           .map_or(false, |parent| parent.is_document())
 }
 
 #[inline]
