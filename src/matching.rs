@@ -772,9 +772,8 @@ fn matches_generic_nth_child<E>(element: &E,
     // fail if we can't find a parent or if the element is the root element
     // of the document (Cf. Selectors Level 3)
     match element.as_node().parent_node() {
-        Some(parent) => if parent.is_document() {
-            return false;
-        },
+        Some(ref parent) if parent.is_document() => return false,
+        Some(_) => (),
         None => return false
     };
 
