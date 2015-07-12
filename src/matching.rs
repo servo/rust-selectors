@@ -706,6 +706,11 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
             matches_root(element)
         }
 
+        SimpleSelector::Empty => {
+            *shareable = false;
+            matches_empty(element)
+        }
+
         SimpleSelector::NthChild(a, b) => {
             *shareable = false;
             matches_generic_nth_child(element, a, b, false, false)
@@ -805,6 +810,20 @@ fn matches_root<E>(element: &E) -> bool where E: Element {
     element.as_node()
            .parent_node()
            .map_or(false, |parent| parent.is_document())
+}
+
+#[inline]
+/// http://dev.w3.org/csswg/selectors-3/#empty-pseudo
+fn matches_empty<E>(element: &E) -> bool where E: Element {
+    let parent_node = element.as_node();
+    let mut child_node = parent_node.first_child();
+    loop {
+        match child_node {
+            Some(ref node) if node.is_element_or_non_empty_text() => return false,
+            Some(node) => child_node = node.next_sibling(),
+            None => return true,
+        }
+    }
 }
 
 #[inline]

@@ -19,6 +19,15 @@ pub trait Node {
     fn next_sibling(&self) -> Option<Self>;
     fn is_document(&self) -> bool;
     fn as_element(&self) -> Option<Self::Element>;
+
+    /// Returns `true` if this node is either:
+    ///
+    /// * An element node
+    /// * A content node with non-zero length
+    ///
+    /// The [`:empty pseudo-class`](http://dev.w3.org/csswg/selectors-3/#empty-pseudo) utilizes
+    /// this method
+    fn is_element_or_non_empty_text(&self) -> bool;
 }
 
 pub trait Element {
