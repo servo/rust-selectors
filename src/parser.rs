@@ -90,6 +90,7 @@ pub enum SimpleSelector {
     Indeterminate,
     FirstChild, LastChild, OnlyChild,
     Root,
+    Empty,
     NthChild(i32, i32),
     NthLastChild(i32, i32),
     NthOfType(i32, i32),
@@ -176,6 +177,7 @@ fn compute_specificity(mut selector: &CompoundSelector,
                 &SimpleSelector::Disabled | &SimpleSelector::Enabled |
                 &SimpleSelector::FirstChild | &SimpleSelector::LastChild |
                 &SimpleSelector::OnlyChild | &SimpleSelector::Root |
+                &SimpleSelector::Empty |
                 &SimpleSelector::Checked |
                 &SimpleSelector::Indeterminate |
                 &SimpleSelector::NthChild(..) |
@@ -621,6 +623,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         "last-child"  => Ok(SimpleSelector::LastChild),
         "only-child"  => Ok(SimpleSelector::OnlyChild),
         "root" => Ok(SimpleSelector::Root),
+        "empty" => Ok(SimpleSelector::Empty),
         "first-of-type" => Ok(SimpleSelector::FirstOfType),
         "last-of-type"  => Ok(SimpleSelector::LastOfType),
         "only-of-type"  => Ok(SimpleSelector::OnlyOfType),
@@ -661,6 +664,12 @@ mod tests {
 
     fn specificity(a: u32, b: u32, c: u32) -> u32 {
         a << 20 | b << 10 | c
+    }
+
+    #[test]
+    fn test_empty() {
+        let list = parse_author_origin_selector_list_from_str(":empty");
+        assert!(list.is_ok());
     }
 
     #[test]

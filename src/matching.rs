@@ -17,12 +17,12 @@ use string_cache::Atom;
 use fnv::FnvHasher;
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector};
-use tree::{TElement, TNode};
+use tree::{Element, Node};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
 
-/// Map node attributes to Rules whose last simple selector starts with them.
+/// Map element data to Rules whose last simple selector starts with them.
 ///
 /// e.g.,
 /// "p > img" would go into the set of Rules corresponding to the
@@ -31,16 +31,16 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 /// the class "bar"
 ///
 /// Because we match Rules right-to-left (i.e., moving up the tree
-/// from a node), we need to compare the last simple selector in the
-/// Rule with the node.
+/// from an element), we need to compare the last simple selector in the
+/// Rule with the element.
 ///
-/// So, if a node has ID "id1" and classes "foo" and "bar", then all
+/// So, if an element has ID "id1" and classes "foo" and "bar", then all
 /// the rules it matches will have their last simple selector starting
 /// either with "#id1" or with ".foo" or with ".bar".
 ///
-/// Hence, the union of the rules keyed on each of node's classes, ID,
+/// Hence, the union of the rules keyed on each of element's classes, ID,
 /// element name, etc. will contain the Rules that actually match that
-/// node.
+/// element.
 pub struct SelectorMap<T> {
     // TODO: Tune the initial capacity of the HashMap
     id_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
@@ -67,16 +67,16 @@ impl<T> SelectorMap<T> {
         }
     }
 
-    /// Append to `rule_list` all Rules in `self` that match node.
+    /// Append to `rule_list` all Rules in `self` that match element.
     ///
-    /// Extract matching rules as per node's ID, classes, tag name, etc..
+    /// Extract matching rules as per element's ID, classes, tag name, etc..
     /// Sort the Rules at the end to maintain cascading order.
-    pub fn get_all_matching_rules<N,V>(&self,
-                                       node: &N,
+    pub fn get_all_matching_rules<E,V>(&self,
+                                       element: &E,
                                        parent_bf: &Option<Box<BloomFilter>>,
                                        matching_rules_list: &mut V,
                                        shareable: &mut bool)
-                                       where N: TNode,
+                                       where E: Element,
                                              V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
@@ -84,21 +84,17 @@ impl<T> SelectorMap<T> {
 
         // At the end, we're going to sort the rules that we added, so remember where we began.
         let init_len = matching_rules_list.len();
-        let element = node.as_element();
-        match element.get_id() {
-            Some(id) => {
-                SelectorMap::get_matching_rules_from_hash(node,
-                                                          parent_bf,
-                                                          &self.id_hash,
-                                                          &id,
-                                                          matching_rules_list,
-                                                          shareable)
-            }
-            None => {}
+        if let Some(id) = element.get_id() {
+            SelectorMap::get_matching_rules_from_hash(element,
+                                                      parent_bf,
+                                                      &self.id_hash,
+                                                      &id,
+                                                      matching_rules_list,
+                                                      shareable)
         }
 
         element.each_class(|class| {
-            SelectorMap::get_matching_rules_from_hash(node,
+            SelectorMap::get_matching_rules_from_hash(element,
                                                       parent_bf,
                                                       &self.class_hash,
                                                       class,
@@ -106,19 +102,19 @@ impl<T> SelectorMap<T> {
                                                       shareable);
         });
 
-        let local_name_hash = if node.is_html_element_in_html_document() {
+        let local_name_hash = if element.is_html_element_in_html_document() {
             &self.lower_local_name_hash
         } else {
             &self.local_name_hash
         };
-        SelectorMap::get_matching_rules_from_hash(node,
+        SelectorMap::get_matching_rules_from_hash(element,
                                                   parent_bf,
                                                   local_name_hash,
                                                   element.get_local_name(),
                                                   matching_rules_list,
                                                   shareable);
 
-        SelectorMap::get_matching_rules(node,
+        SelectorMap::get_matching_rules(element,
                                         parent_bf,
                                         &self.universal_rules,
                                         matching_rules_list,
@@ -132,7 +128,7 @@ impl<T> SelectorMap<T> {
         }
     }
 
-    fn get_matching_rules_from_hash<N,V>(node: &N,
+    fn get_matching_rules_from_hash<E,V>(element: &E,
                                          parent_bf: &Option<Box<BloomFilter>>,
                                          hash: &HashMap<Atom,
                                                         Vec<Rule<T>>,
@@ -140,11 +136,11 @@ impl<T> SelectorMap<T> {
                                          key: &Atom,
                                          matching_rules: &mut V,
                                          shareable: &mut bool)
-                                         where N: TNode,
+                                         where E: Element,
                                                V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
-                SelectorMap::get_matching_rules(node,
+                SelectorMap::get_matching_rules(element,
                                                 parent_bf,
                                                 rules,
                                                 matching_rules,
@@ -154,16 +150,16 @@ impl<T> SelectorMap<T> {
         }
     }
 
-    /// Adds rules in `rules` that match `node` to the `matching_rules` list.
-    fn get_matching_rules<N,V>(node: &N,
+    /// Adds rules in `rules` that match `element` to the `matching_rules` list.
+    fn get_matching_rules<E,V>(element: &E,
                                parent_bf: &Option<Box<BloomFilter>>,
                                rules: &[Rule<T>],
                                matching_rules: &mut V,
                                shareable: &mut bool)
-                               where N: TNode,
+                               where E: Element,
                                      V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
-            if matches_compound_selector(&*rule.selector, node, parent_bf, shareable) {
+            if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {
                 matching_rules.push(rule.declarations.clone());
             }
         }
@@ -174,28 +170,20 @@ impl<T> SelectorMap<T> {
     pub fn insert(&mut self, rule: Rule<T>) {
         self.empty = false;
 
-        match SelectorMap::get_id_name(&rule) {
-            Some(id_name) => {
-                find_push(&mut self.id_hash, id_name, rule);
-                return;
-            }
-            None => {}
-        }
-        match SelectorMap::get_class_name(&rule) {
-            Some(class_name) => {
-                find_push(&mut self.class_hash, class_name, rule);
-                return;
-            }
-            None => {}
+        if let Some(id_name) = SelectorMap::get_id_name(&rule) {
+            find_push(&mut self.id_hash, id_name, rule);
+            return;
         }
 
-        match SelectorMap::get_local_name(&rule) {
-            Some(LocalName { name, lower_name }) => {
-                find_push(&mut self.local_name_hash, name, rule.clone());
-                find_push(&mut self.lower_local_name_hash, lower_name, rule);
-                return;
-            }
-            None => {}
+        if let Some(class_name) = SelectorMap::get_class_name(&rule) {
+            find_push(&mut self.class_hash, class_name, rule);
+            return;
+        }
+
+        if let Some(LocalName { name, lower_name }) = SelectorMap::get_local_name(&rule) {
+            find_push(&mut self.local_name_hash, name, rule.clone());
+            find_push(&mut self.lower_local_name_hash, lower_name, rule);
+            return;
         }
 
         self.universal_rules.push(rule);
@@ -251,7 +239,7 @@ pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: usize = 4096;
 
 
 pub struct Rule<T> {
-    // This is an Arc because Rule will essentially be cloned for every node
+    // This is an Arc because Rule will essentially be cloned for every element
     // that it matches. Selector contains an owned vector (through
     // CompoundSelector) and we want to avoid the allocation.
     pub selector: Arc<CompoundSelector>,
@@ -300,11 +288,11 @@ impl<T> DeclarationBlock<T> {
     }
 }
 
-pub fn matches<N>(selector_list: &Vec<Selector>,
-                  element: &N,
+pub fn matches<E>(selector_list: &Vec<Selector>,
+                  element: &E,
                   parent_bf: &Option<Box<BloomFilter>>)
                   -> bool
-                  where N: TNode {
+                  where E: Element {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
         matches_compound_selector(&*selector.compound_selectors, element, parent_bf, &mut false)
@@ -315,14 +303,14 @@ pub fn matches<N>(selector_list: &Vec<Selector>,
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
-/// will almost certainly break as nodes will start mistakenly sharing styles. (See the code in
+/// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
-fn matches_compound_selector<N>(selector: &CompoundSelector,
-                                element: &N,
+fn matches_compound_selector<E>(selector: &CompoundSelector,
+                                element: &E,
                                 parent_bf: &Option<Box<BloomFilter>>,
                                 shareable: &mut bool)
                                 -> bool
-                                where N: TNode {
+                                where E: Element {
     match matches_compound_selector_internal(selector, element, parent_bf, shareable) {
         SelectorMatchingResult::Matched => true,
         _ => false
@@ -356,12 +344,12 @@ fn matches_compound_selector<N>(selector: &CompoundSelector,
 ///   NextSibling combinator doesn't match on the found element.
 ///
 /// For example, when the selector "d1 d2 a" is provided and we cannot *find*
-/// an appropriate ancestor node for "d1", this selector matching raises
-/// NotMatchedGlobally since even if "d2" is moved to more upper node, the
+/// an appropriate ancestor element for "d1", this selector matching raises
+/// NotMatchedGlobally since even if "d2" is moved to more upper element, the
 /// candidates for "d1" becomes less than before and d1 .
 ///
 /// The next example is siblings. When the selector "b1 + b2 ~ d1 a" is
-/// provided and we cannot *find* an appropriate brother node for b1,
+/// provided and we cannot *find* an appropriate brother element for b1,
 /// the selector matching raises NotMatchedAndRestartFromClosestDescendant.
 /// The selectors ("b1 + b2 ~") doesn't match and matching restart from "d1".
 ///
@@ -382,12 +370,12 @@ enum SelectorMatchingResult {
 /// Quickly figures out whether or not the compound selector is worth doing more
 /// work on. If the simple selectors don't match, or there's a child selector
 /// that does not appear in the bloom parent bloom filter, we can exit early.
-fn can_fast_reject<N>(mut selector: &CompoundSelector,
-                      element: &N,
+fn can_fast_reject<E>(mut selector: &CompoundSelector,
+                      element: &E,
                       parent_bf: &Option<Box<BloomFilter>>,
                       shareable: &mut bool)
                       -> Option<SelectorMatchingResult>
-                      where N: TNode {
+                      where E: Element {
     if !selector.simple_selectors.iter().all(|simple_selector| {
       matches_simple_selector(simple_selector, element, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
@@ -443,16 +431,15 @@ fn can_fast_reject<N>(mut selector: &CompoundSelector,
     return None;
 }
 
-fn matches_compound_selector_internal<N>(selector: &CompoundSelector,
-                                         element: &N,
+fn matches_compound_selector_internal<E>(selector: &CompoundSelector,
+                                         element: &E,
                                          parent_bf: &Option<Box<BloomFilter>>,
                                          shareable: &mut bool)
                                          -> SelectorMatchingResult
-                                         where N: TNode {
-    match can_fast_reject(selector, element, parent_bf, shareable) {
-        None => {},
-        Some(result) => return result,
-    };
+                                         where E: Element {
+    if let Some(result) = can_fast_reject(selector, element, parent_bf, shareable) {
+        return result;
+    }
 
     match selector.next {
         None => SelectorMatchingResult::Matched,
@@ -463,7 +450,7 @@ fn matches_compound_selector_internal<N>(selector: &CompoundSelector,
                 Combinator::NextSibling => (true, SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant),
                 Combinator::LaterSibling => (true, SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant),
             };
-            let mut node = (*element).clone();
+            let mut node = element.as_node();
             loop {
                 let next_node = if siblings {
                     node.prev_sibling()
@@ -474,9 +461,9 @@ fn matches_compound_selector_internal<N>(selector: &CompoundSelector,
                     None => return candidate_not_found,
                     Some(next_node) => node = next_node,
                 }
-                if node.is_element() {
+                if let Some(element) = node.as_element() {
                     let result = matches_compound_selector_internal(&**next_selector,
-                                                                    &node,
+                                                                    &element,
                                                                     parent_bf,
                                                                     shareable);
                     match (result, combinator) {
@@ -569,35 +556,31 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
-/// will almost certainly break as nodes will start mistakenly sharing styles. (See the code in
+/// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<N>(selector: &SimpleSelector,
-                                  element: &N,
+pub fn matches_simple_selector<E>(selector: &SimpleSelector,
+                                  element: &E,
                                   shareable: &mut bool)
                                   -> bool
-                                  where N: TNode {
+                                  where E: Element {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
-            let element = element.as_element();
             element.get_local_name() == name
         }
 
         SimpleSelector::Namespace(ref namespace) => {
-            let element = element.as_element();
             element.get_namespace() == namespace
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
             *shareable = false;
-            let element = element.as_element();
             element.get_id().map_or(false, |attr| {
                 attr == *id
             })
         }
         SimpleSelector::Class(ref class) => {
-            let element = element.as_element();
             element.has_class(class)
         }
 
@@ -667,52 +650,43 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
 
         SimpleSelector::AnyLink => {
             *shareable = false;
-            let element = element.as_element();
             element.is_link()
         }
         SimpleSelector::Link => {
-            let elem = element.as_element();
-            elem.is_unvisited_link()
+            element.is_unvisited_link()
         }
         SimpleSelector::Visited => {
-            let elem = element.as_element();
-            elem.is_visited_link()
+            element.is_visited_link()
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
         SimpleSelector::Hover => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_hover_state()
+            element.get_hover_state()
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-focus
         SimpleSelector::Focus => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_focus_state()
+            element.get_focus_state()
         },
         // http://www.whatwg.org/html/#selector-disabled
         SimpleSelector::Disabled => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_disabled_state()
+            element.get_disabled_state()
         },
         // http://www.whatwg.org/html/#selector-enabled
         SimpleSelector::Enabled => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_enabled_state()
+            element.get_enabled_state()
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-checked
         SimpleSelector::Checked => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_checked_state()
+            element.get_checked_state()
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-indeterminate
         SimpleSelector::Indeterminate => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.get_indeterminate_state()
+            element.get_indeterminate_state()
         }
         SimpleSelector::FirstChild => {
             *shareable = false;
@@ -730,6 +704,11 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
         SimpleSelector::Root => {
             *shareable = false;
             matches_root(element)
+        }
+
+        SimpleSelector::Empty => {
+            *shareable = false;
+            matches_empty(element)
         }
 
         SimpleSelector::NthChild(a, b) => {
@@ -765,8 +744,7 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
 
         SimpleSelector::ServoNonzeroBorder => {
             *shareable = false;
-            let elem = element.as_element();
-            elem.has_servo_nonzero_border()
+            element.has_servo_nonzero_border()
         }
 
         SimpleSelector::Negation(ref negated) => {
@@ -777,43 +755,40 @@ pub fn matches_simple_selector<N>(selector: &SimpleSelector,
 }
 
 #[inline]
-fn matches_generic_nth_child<N>(element: &N,
+fn matches_generic_nth_child<E>(element: &E,
                                 a: i32,
                                 b: i32,
                                 is_of_type: bool,
                                 is_from_end: bool)
                                 -> bool
-                                where N: TNode {
-    let mut node = element.clone();
-    // fail if we can't find a parent or if the node is the root element
+                                where E: Element {
+    // fail if we can't find a parent or if the element is the root element
     // of the document (Cf. Selectors Level 3)
-    match node.parent_node() {
-        Some(parent) => if parent.is_document() {
-            return false;
-        },
+    match element.as_node().parent_node() {
+        Some(ref parent) if parent.is_document() => return false,
+        Some(_) => (),
         None => return false
     };
 
+    let mut sibling = element.as_node();
     let mut index = 1;
     loop {
         if is_from_end {
-            match node.next_sibling() {
+            match sibling.next_sibling() {
                 None => break,
-                Some(next_sibling) => node = next_sibling
+                Some(next_sibling) => sibling = next_sibling
             }
         } else {
-            match node.prev_sibling() {
+            match sibling.prev_sibling() {
                 None => break,
-                Some(prev_sibling) => node = prev_sibling
+                Some(prev_sibling) => sibling = prev_sibling
             }
         }
 
-        if node.is_element() {
+        if let Some(sibling_element) = sibling.as_element() {
             if is_of_type {
-                let element = element.as_element();
-                let node = node.as_element();
-                if element.get_local_name() == node.get_local_name() &&
-                    element.get_namespace() == node.get_namespace() {
+                if element.get_local_name() == sibling_element.get_local_name() &&
+                    element.get_namespace() == sibling_element.get_namespace() {
                     index += 1;
                 }
             } else {
@@ -831,21 +806,34 @@ fn matches_generic_nth_child<N>(element: &N,
 }
 
 #[inline]
-fn matches_root<N>(element: &N) -> bool where N: TNode {
-    match element.parent_node() {
-        Some(parent) => parent.is_document(),
-        None => false
+fn matches_root<E>(element: &E) -> bool where E: Element {
+    element.as_node()
+           .parent_node()
+           .map_or(false, |parent| parent.is_document())
+}
+
+#[inline]
+/// http://dev.w3.org/csswg/selectors-3/#empty-pseudo
+fn matches_empty<E>(element: &E) -> bool where E: Element {
+    let parent_node = element.as_node();
+    let mut child_node = parent_node.first_child();
+    loop {
+        match child_node {
+            Some(ref node) if node.is_element_or_non_empty_text() => return false,
+            Some(node) => child_node = node.next_sibling(),
+            None => return true,
+        }
     }
 }
 
 #[inline]
-fn matches_first_child<N>(element: &N) -> bool where N: TNode {
-    let mut node = element.clone();
+fn matches_first_child<E>(element: &E) -> bool where E: Element {
+    let mut node = element.as_node();
     loop {
         match node.prev_sibling() {
             Some(prev_sibling) => {
                 node = prev_sibling;
-                if node.is_element() {
+                if node.as_element().is_some() {
                     return false
                 }
             },
@@ -861,13 +849,13 @@ fn matches_first_child<N>(element: &N) -> bool where N: TNode {
 }
 
 #[inline]
-fn matches_last_child<N>(element: &N) -> bool where N: TNode {
-    let mut node = element.clone();
+fn matches_last_child<E>(element: &E) -> bool where E: Element {
+    let mut node = element.as_node();
     loop {
         match node.next_sibling() {
             Some(next_sibling) => {
                 node = next_sibling;
-                if node.is_element() {
+                if node.as_element().is_some() {
                     return false
                 }
             },
@@ -885,19 +873,15 @@ fn matches_last_child<N>(element: &N) -> bool where N: TNode {
 fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
                 key: Atom,
                 value: Rule<T>) {
-    match map.get_mut(&key) {
-        Some(vec) => {
-            vec.push(value);
-            return
-        }
-        None => {}
+    if let Some(vec) = map.get_mut(&key) {
+        vec.push(value);
+        return
     }
     map.insert(key, vec![value]);
 }
 
 #[cfg(test)]
 mod tests {
-    use std::cmp::Ordering;
     use std::sync::Arc;
     use super::{DeclarationBlock, Rule, SelectorMap};
     use parser::LocalName;
@@ -931,7 +915,7 @@ mod tests {
         let rules_list = get_mock_rules(&["a.intro", "img.sidebar"]);
         let a = &rules_list[0][0].declarations;
         let b = &rules_list[1][0].declarations;
-        assert!((a.specificity, a.source_order).cmp(&(b.specificity, b.source_order)) == Ordering::Less,
+        assert!((a.specificity, a.source_order) < ((b.specificity, b.source_order)),
                 "The rule that comes later should win.");
     }
 
