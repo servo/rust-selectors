@@ -9,18 +9,20 @@ use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
 
 
-pub trait Node<Element> {
+pub trait Node {
+    type Element: Element<Node=Self>;
+
     fn parent_node(&self) -> Option<Self>;
     fn first_child(&self) -> Option<Self>;
     fn last_child(&self) -> Option<Self>;
     fn prev_sibling(&self) -> Option<Self>;
     fn next_sibling(&self) -> Option<Self>;
     fn is_document(&self) -> bool;
-    fn as_element(&self) -> Option<Element>;
+    fn as_element(&self) -> Option<Self::Element>;
 }
 
 pub trait Element {
-    type Node: Node<Self>;
+    type Node: Node<Element=Self>;
 
     fn as_node(&self) -> Self::Node;
     fn is_html_element_in_html_document(&self) -> bool;
