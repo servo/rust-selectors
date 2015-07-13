@@ -9,31 +9,21 @@ use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
 
 
-pub trait Node {
-    type Element: Element<Node=Self>;
-
-    fn parent_node(&self) -> Option<Self>;
-    fn first_child(&self) -> Option<Self>;
-    fn last_child(&self) -> Option<Self>;
-    fn prev_sibling(&self) -> Option<Self>;
-    fn next_sibling(&self) -> Option<Self>;
-    fn is_document(&self) -> bool;
-    fn as_element(&self) -> Option<Self::Element>;
-
-    /// Returns `true` if this node is either:
-    ///
-    /// * An element node
-    /// * A content node with non-zero length
-    ///
-    /// The [`:empty pseudo-class`](http://dev.w3.org/csswg/selectors-3/#empty-pseudo) utilizes
-    /// this method
-    fn is_element_or_non_empty_text(&self) -> bool;
-}
-
 pub trait Element {
-    type Node: Node<Element=Self>;
+    fn parent_element(&self) -> Option<Self>;
 
-    fn as_node(&self) -> Self::Node;
+    // Skips non-element nodes
+    fn first_child_element(&self) -> Option<Self>;
+
+    // Skips non-element nodes
+    fn last_child_element(&self) -> Option<Self>;
+
+    // Skips non-element nodes
+    fn prev_sibling_element(&self) -> Option<Self>;
+
+    // Skips non-element nodes
+    fn next_sibling_element(&self) -> Option<Self>;
+
     fn is_html_element_in_html_document(&self) -> bool;
     fn get_local_name<'a>(&'a self) -> &'a Atom;
     fn get_namespace<'a>(&'a self) -> &'a Namespace;
@@ -46,6 +36,12 @@ pub trait Element {
     fn get_indeterminate_state(&self) -> bool;
     fn has_class(&self, name: &Atom) -> bool;
     fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
+
+    /// Returns whether this element matches `:empty`.
+    ///
+    /// That is, whether it does not contain any child element or any non-zero-length text node.
+    /// See http://dev.w3.org/csswg/selectors-3/#empty-pseudo
+    fn is_empty(&self) -> bool;
 
     /// Returns whether this element matches `:root`,
     /// i.e. whether it is the root element of a document.

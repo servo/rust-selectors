@@ -17,7 +17,7 @@ use string_cache::Atom;
 use fnv::FnvHasher;
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector};
-use tree::{Element, Node};
+use tree::Element;
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -450,48 +450,50 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector,
                 Combinator::NextSibling => (true, SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant),
                 Combinator::LaterSibling => (true, SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant),
             };
-            let mut node = element.as_node();
+            let mut next_element = if siblings {
+                element.prev_sibling_element()
+            } else {
+                element.parent_element()
+            };
             loop {
-                let next_node = if siblings {
-                    node.prev_sibling()
-                } else {
-                    node.parent_node()
-                };
-                match next_node {
+                let element = match next_element {
                     None => return candidate_not_found,
-                    Some(next_node) => node = next_node,
+                    Some(next_element) => next_element,
+                };
+                let result = matches_compound_selector_internal(&**next_selector,
+                                                                &element,
+                                                                parent_bf,
+                                                                shareable);
+                match (result, combinator) {
+                    // Return the status immediately.
+                    (SelectorMatchingResult::Matched, _) => return result,
+                    (SelectorMatchingResult::NotMatchedGlobally, _) => return result,
+
+                    // Upgrade the failure status to
+                    // NotMatchedAndRestartFromClosestDescendant.
+                    (_, Combinator::Child) => return SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
+
+                    // Return the status directly.
+                    (_, Combinator::NextSibling) => return result,
+
+                    // If the failure status is NotMatchedAndRestartFromClosestDescendant
+                    // and combinator is Combinator::LaterSibling, give up this Combinator::LaterSibling matching
+                    // and restart from the closest descendant combinator.
+                    (SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant, Combinator::LaterSibling) => return result,
+
+                    // The Combinator::Descendant combinator and the status is
+                    // NotMatchedAndRestartFromClosestLaterSibling or
+                    // NotMatchedAndRestartFromClosestDescendant,
+                    // or the Combinator::LaterSibling combinator and the status is
+                    // NotMatchedAndRestartFromClosestDescendant
+                    // can continue to matching on the next candidate element.
+                    _ => {},
                 }
-                if let Some(element) = node.as_element() {
-                    let result = matches_compound_selector_internal(&**next_selector,
-                                                                    &element,
-                                                                    parent_bf,
-                                                                    shareable);
-                    match (result, combinator) {
-                        // Return the status immediately.
-                        (SelectorMatchingResult::Matched, _) => return result,
-                        (SelectorMatchingResult::NotMatchedGlobally, _) => return result,
-
-                        // Upgrade the failure status to
-                        // NotMatchedAndRestartFromClosestDescendant.
-                        (_, Combinator::Child) => return SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant,
-
-                        // Return the status directly.
-                        (_, Combinator::NextSibling) => return result,
-
-                        // If the failure status is NotMatchedAndRestartFromClosestDescendant
-                        // and combinator is Combinator::LaterSibling, give up this Combinator::LaterSibling matching
-                        // and restart from the closest descendant combinator.
-                        (SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant, Combinator::LaterSibling) => return result,
-
-                        // The Combinator::Descendant combinator and the status is
-                        // NotMatchedAndRestartFromClosestLaterSibling or
-                        // NotMatchedAndRestartFromClosestDescendant,
-                        // or the Combinator::LaterSibling combinator and the status is
-                        // NotMatchedAndRestartFromClosestDescendant
-                        // can continue to matching on the next candidate element.
-                        _ => {},
-                    }
-                }
+                next_element = if siblings {
+                    element.prev_sibling_element()
+                } else {
+                    element.parent_element()
+                };
             }
         }
     }
@@ -708,7 +710,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
 
         SimpleSelector::Empty => {
             *shareable = false;
-            matches_empty(element)
+            element.is_empty()
         }
 
         SimpleSelector::NthChild(a, b) => {
@@ -766,31 +768,29 @@ fn matches_generic_nth_child<E>(element: &E,
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
 
-    let mut sibling = element.as_node();
     let mut index = 1;
+    let mut next_sibling = match is_from_end {
+        true => element.next_sibling_element(),
+        false => element.prev_sibling_element(),
+    };
     loop {
-        if is_from_end {
-            match sibling.next_sibling() {
-                None => break,
-                Some(next_sibling) => sibling = next_sibling
+        let sibling = match next_sibling {
+            None => break,
+            Some(next_sibling) => next_sibling
+        };
+
+        if is_of_type {
+            if element.get_local_name() == sibling.get_local_name() &&
+                element.get_namespace() == sibling.get_namespace() {
+                index += 1;
             }
         } else {
-            match sibling.prev_sibling() {
-                None => break,
-                Some(prev_sibling) => sibling = prev_sibling
-            }
+          index += 1;
         }
-
-        if let Some(sibling_element) = sibling.as_element() {
-            if is_of_type {
-                if element.get_local_name() == sibling_element.get_local_name() &&
-                    element.get_namespace() == sibling_element.get_namespace() {
-                    index += 1;
-                }
-            } else {
-              index += 1;
-            }
-        }
+        next_sibling = match is_from_end {
+            true => sibling.next_sibling_element(),
+            false => sibling.prev_sibling_element(),
+        };
     }
 
     if a == 0 {
@@ -802,36 +802,11 @@ fn matches_generic_nth_child<E>(element: &E,
 }
 
 #[inline]
-/// http://dev.w3.org/csswg/selectors-3/#empty-pseudo
-fn matches_empty<E>(element: &E) -> bool where E: Element {
-    let parent_node = element.as_node();
-    let mut child_node = parent_node.first_child();
-    loop {
-        match child_node {
-            Some(ref node) if node.is_element_or_non_empty_text() => return false,
-            Some(node) => child_node = node.next_sibling(),
-            None => return true,
-        }
-    }
-}
-
-#[inline]
 fn matches_first_child<E>(element: &E) -> bool where E: Element {
     // Selectors Level 4 changed from Level 3:
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
-    let mut node = element.as_node();
-    loop {
-        match node.prev_sibling() {
-            Some(prev_sibling) => {
-                node = prev_sibling;
-                if node.as_element().is_some() {
-                    return false
-                }
-            },
-            None => return true
-        }
-    }
+    element.prev_sibling_element().is_none()
 }
 
 #[inline]
@@ -839,18 +814,7 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
     // Selectors Level 4 changed from Level 3:
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
-    let mut node = element.as_node();
-    loop {
-        match node.next_sibling() {
-            Some(next_sibling) => {
-                node = next_sibling;
-                if node.as_element().is_some() {
-                    return false
-                }
-            },
-            None => return true
-        }
-    }
+    element.next_sibling_element().is_none()
 }
 
 fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
