@@ -703,7 +703,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
 
         SimpleSelector::Root => {
             *shareable = false;
-            matches_root(element)
+            element.is_root()
         }
 
         SimpleSelector::Empty => {
@@ -799,13 +799,6 @@ fn matches_generic_nth_child<E>(element: &E,
         (index - b) / a >= 0 &&
         (index - b) % a == 0
     }
-}
-
-#[inline]
-fn matches_root<E>(element: &E) -> bool where E: Element {
-    element.as_node()
-           .parent_node()
-           .map_or(false, |parent| parent.is_document())
 }
 
 #[inline]

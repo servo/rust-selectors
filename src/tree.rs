@@ -47,6 +47,13 @@ pub trait Element {
     fn has_class(&self, name: &Atom) -> bool;
     fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
 
+    /// Returns whether this element matches `:root`,
+    /// i.e. whether it is the root element of a document.
+    ///
+    /// Note: this can be false even if `.parent_element()` is `None`
+    /// if the parent node is a `DocumentFragment`.
+    fn is_root(&self) -> bool;
+
     /// Returns whether this element matches `:-servo-nonzero-border`,
     /// which is only parsed when ParserContext::in_user_agent_stylesheet is true.
     /// It is an implementation detail of Servo for "only if border is not equivalent to zero":
