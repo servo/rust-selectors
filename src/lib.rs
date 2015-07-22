@@ -20,4 +20,4 @@ pub mod matching;
 pub mod parser;
 mod tree;
 
-pub use tree::{Node, Element};
+pub use tree::Element;
