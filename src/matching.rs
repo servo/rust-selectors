@@ -73,7 +73,7 @@ impl<T> SelectorMap<T> {
     /// Sort the Rules at the end to maintain cascading order.
     pub fn get_all_matching_rules<E,V>(&self,
                                        element: &E,
-                                       parent_bf: &Option<Box<BloomFilter>>,
+                                       parent_bf: Option<&BloomFilter>,
                                        matching_rules_list: &mut V,
                                        shareable: &mut bool)
                                        where E: Element,
@@ -129,7 +129,7 @@ impl<T> SelectorMap<T> {
     }
 
     fn get_matching_rules_from_hash<E,V>(element: &E,
-                                         parent_bf: &Option<Box<BloomFilter>>,
+                                         parent_bf: Option<&BloomFilter>,
                                          hash: &HashMap<Atom,
                                                         Vec<Rule<T>>,
                                                         DefaultState<FnvHasher>>,
@@ -152,7 +152,7 @@ impl<T> SelectorMap<T> {
 
     /// Adds rules in `rules` that match `element` to the `matching_rules` list.
     fn get_matching_rules<E,V>(element: &E,
-                               parent_bf: &Option<Box<BloomFilter>>,
+                               parent_bf: Option<&BloomFilter>,
                                rules: &[Rule<T>],
                                matching_rules: &mut V,
                                shareable: &mut bool)
@@ -290,7 +290,7 @@ impl<T> DeclarationBlock<T> {
 
 pub fn matches<E>(selector_list: &Vec<Selector>,
                   element: &E,
-                  parent_bf: &Option<Box<BloomFilter>>)
+                  parent_bf: Option<&BloomFilter>)
                   -> bool
                   where E: Element {
     selector_list.iter().any(|selector| {
@@ -307,7 +307,7 @@ pub fn matches<E>(selector_list: &Vec<Selector>,
 /// `main/css/matching.rs`.)
 fn matches_compound_selector<E>(selector: &CompoundSelector,
                                 element: &E,
-                                parent_bf: &Option<Box<BloomFilter>>,
+                                parent_bf: Option<&BloomFilter>,
                                 shareable: &mut bool)
                                 -> bool
                                 where E: Element {
@@ -372,7 +372,7 @@ enum SelectorMatchingResult {
 /// that does not appear in the bloom parent bloom filter, we can exit early.
 fn can_fast_reject<E>(mut selector: &CompoundSelector,
                       element: &E,
-                      parent_bf: &Option<Box<BloomFilter>>,
+                      parent_bf: Option<&BloomFilter>,
                       shareable: &mut bool)
                       -> Option<SelectorMatchingResult>
                       where E: Element {
@@ -381,9 +381,9 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector,
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
     }
 
-    let bf: &BloomFilter = match *parent_bf {
+    let bf: &BloomFilter = match parent_bf {
         None => return None,
-        Some(ref bf) => &**bf,
+        Some(ref bf) => bf,
     };
 
     // See if the bloom filter can exclude any of the descendant selectors, and
@@ -433,7 +433,7 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector,
 
 fn matches_compound_selector_internal<E>(selector: &CompoundSelector,
                                          element: &E,
-                                         parent_bf: &Option<Box<BloomFilter>>,
+                                         parent_bf: Option<&BloomFilter>,
                                          shareable: &mut bool)
                                          -> SelectorMatchingResult
                                          where E: Element {
