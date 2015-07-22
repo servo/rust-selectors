@@ -762,13 +762,9 @@ fn matches_generic_nth_child<E>(element: &E,
                                 is_from_end: bool)
                                 -> bool
                                 where E: Element {
-    // fail if we can't find a parent or if the element is the root element
-    // of the document (Cf. Selectors Level 3)
-    match element.as_node().parent_node() {
-        Some(ref parent) if parent.is_document() => return false,
-        Some(_) => (),
-        None => return false
-    };
+    // Selectors Level 4 changed from Level 3:
+    // This can match without a parent element:
+    // https://drafts.csswg.org/selectors-4/#child-index
 
     let mut sibling = element.as_node();
     let mut index = 1;
@@ -828,6 +824,9 @@ fn matches_empty<E>(element: &E) -> bool where E: Element {
 
 #[inline]
 fn matches_first_child<E>(element: &E) -> bool where E: Element {
+    // Selectors Level 4 changed from Level 3:
+    // This can match without a parent element:
+    // https://drafts.csswg.org/selectors-4/#child-index
     let mut node = element.as_node();
     loop {
         match node.prev_sibling() {
@@ -837,19 +836,16 @@ fn matches_first_child<E>(element: &E) -> bool where E: Element {
                     return false
                 }
             },
-            None => match node.parent_node() {
-                // Selectors level 3 says :first-child does not match the
-                // root of the document; Warning, level 4 says, for the time
-                // being, the contrary...
-                Some(parent) => return !parent.is_document(),
-                None => return false
-            }
+            None => return true
         }
     }
 }
 
 #[inline]
 fn matches_last_child<E>(element: &E) -> bool where E: Element {
+    // Selectors Level 4 changed from Level 3:
+    // This can match without a parent element:
+    // https://drafts.csswg.org/selectors-4/#child-index
     let mut node = element.as_node();
     loop {
         match node.next_sibling() {
@@ -859,13 +855,7 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
                     return false
                 }
             },
-            None => match node.parent_node() {
-                // Selectors level 3 says :last-child does not match the
-                // root of the document; Warning, level 4 says, for the time
-                // being, the contrary...
-                Some(parent) => return !parent.is_document(),
-                None => return false
-            }
+            None => return true
         }
     }
 }
