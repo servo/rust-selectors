@@ -12,7 +12,7 @@ keywords = ["css", "selectors"]
 license = "MPL-2.0"
 
 [dependencies]
-bitflags = "0.1"
+bitflags = "0.3"
 matches = "0.1"
 quicksort = "1.0"
 cssparser = "0.3"
