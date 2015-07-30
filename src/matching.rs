@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use bloom::BloomFilter;
 use smallvec::VecLike;
-use introsort::sort_by;
+use quickersort::sort_by;
 use string_cache::Atom;
 
 use fnv::FnvHasher;
