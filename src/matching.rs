@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use bloom::BloomFilter;
 use smallvec::VecLike;
-use quicksort::quicksort_by;
+use quickersort::sort_by;
 use string_cache::Atom;
 
 use fnv::FnvHasher;
@@ -121,7 +121,7 @@ impl<T> SelectorMap<T> {
                                         shareable);
 
         // Sort only the rules we just added.
-        quicksort_by(&mut matching_rules_list[init_len..], compare);
+        sort_by(&mut matching_rules_list[init_len..], &compare);
 
         fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
             (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))

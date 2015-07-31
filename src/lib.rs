@@ -11,7 +11,7 @@
 #[macro_use] extern crate matches;
 #[cfg(test)] extern crate rand;
 extern crate string_cache;
-extern crate quicksort;
+extern crate quickersort;
 extern crate smallvec;
 extern crate fnv;
 

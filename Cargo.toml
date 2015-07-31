@@ -14,12 +14,12 @@ license = "MPL-2.0"
 [dependencies]
 bitflags = "0.3"
 matches = "0.1"
-quicksort = "1.0"
 cssparser = "0.3"
 smallvec = "0.1"
 fnv = "1.0"
 string_cache = "0.1"
 string_cache_plugin = "0.1"
+quickersort = "1.0.0"
 
 [dev-dependencies]
 rand = "0.3"
