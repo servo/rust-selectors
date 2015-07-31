@@ -1,10 +1,12 @@
-language: rust
-rust: nightly
 sudo: false
-
+language: rust
+rust:
+    - nightly
+    - beta
+    - stable
 script:
-- cargo build
-- cargo test
+    - cargo test
+    - ([ $TRAVIS_RUST_VERSION != nightly ] || cargo test --features unstable)
 
 branches:
   except:

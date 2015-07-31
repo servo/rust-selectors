@@ -2,23 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use std::ascii::{AsciiExt, OwnedAsciiExt};
+use std::ascii::AsciiExt;
 use std::borrow::Cow;
 use std::cmp;
-use std::collections::HashMap;
-use std::collections::hash_state::DefaultState;
-use std::default::Default;
 use std::sync::Arc;
 
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
 
-use fnv::FnvHasher;
+use hash_map;
 
 pub struct ParserContext {
     pub in_user_agent_stylesheet: bool,
     pub default_namespace: Option<Namespace>,
-    pub namespace_prefixes: HashMap<String, Namespace, DefaultState<FnvHasher>>,
+    pub namespace_prefixes: hash_map::HashMap<String, Namespace>,
 }
 
 impl ParserContext {
@@ -26,7 +23,7 @@ impl ParserContext {
         ParserContext {
             in_user_agent_stylesheet: false,
             default_namespace: None,
-            namespace_prefixes: HashMap::with_hash_state(Default::default()),
+            namespace_prefixes: hash_map::new(),
         }
     }
 }
@@ -260,7 +257,7 @@ fn parse_selector(context: &ParserContext, input: &mut Parser) -> Result<Selecto
         let (simple_selectors, pseudo) = try!(parse_simple_selectors(context, input));
         compound = CompoundSelector {
             simple_selectors: simple_selectors,
-            next: Some((box compound, combinator))
+            next: Some((Box::new(compound), combinator))
         };
         pseudo_element = pseudo;
     }
@@ -291,7 +288,7 @@ fn parse_type_selector(context: &ParserContext, input: &mut Parser)
                 Some(name) => {
                     simple_selectors.push(SimpleSelector::LocalName(LocalName {
                         name: Atom::from_slice(&name),
-                        lower_name: Atom::from_slice(&name.into_owned().into_ascii_lowercase())
+                        lower_name: Atom::from_slice(&name.to_ascii_lowercase()),
                     }))
                 }
                 None => (),
@@ -716,13 +713,13 @@ mod tests {
         assert_eq!(parse("e.foo #bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::ID(Atom::from_slice("bar"))),
-                next: Some((box CompoundSelector {
+                next: Some((Box::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
                                                 name: Atom::from_slice("e"),
                                                 lower_name: Atom::from_slice("e") }),
                                            SimpleSelector::Class(Atom::from_slice("foo"))),
                     next: None,
-                }, Combinator::Descendant)),
+                }), Combinator::Descendant)),
             }),
             pseudo_element: None,
             specificity: specificity(1, 1, 1),
@@ -783,12 +780,12 @@ mod tests {
         assert_eq!(parse("div :after"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(),
-                next: Some((box CompoundSelector {
+                next: Some((Box::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
                         name: atom!("div"),
                         lower_name: atom!("div") })),
                     next: None,
-                }, Combinator::Descendant)),
+                }), Combinator::Descendant)),
             }),
             pseudo_element: Some(PseudoElement::After),
             specificity: specificity(0, 0, 2),
@@ -798,12 +795,12 @@ mod tests {
                 simple_selectors: vec![
                     SimpleSelector::Class(Atom::from_slice("ok")),
                 ],
-                next: Some((box CompoundSelector {
+                next: Some((Box::new(CompoundSelector {
                     simple_selectors: vec![
                         SimpleSelector::ID(Atom::from_slice("d1")),
                     ],
                     next: None,
-                }, Combinator::Child)),
+                }), Combinator::Child)),
             }),
             pseudo_element: None,
             specificity: (1 << 20) + (1 << 10) + (0 << 0),
