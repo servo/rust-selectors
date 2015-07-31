@@ -250,11 +250,12 @@ fn create_and_insert_some_stuff() {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[cfg(test)]
 mod bench {
     extern crate test;
 
-    use std::hash::{hash, SipHasher};
+    use std::hash::{Hash, Hasher, SipHasher};
     use super::BloomFilter;
 
     #[bench]
@@ -328,7 +329,9 @@ mod bench {
     fn hash_a_uint(b: &mut test::Bencher) {
         let mut i = 0_usize;
         b.iter(|| {
-            test::black_box(hash::<usize, SipHasher>(&i));
+            let mut hasher = SipHasher::default();
+            i.hash(&mut hasher);
+            test::black_box(hasher.finish());
             i += 1;
         })
     }

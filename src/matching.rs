@@ -4,9 +4,6 @@
 
 use std::ascii::AsciiExt;
 use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::collections::hash_state::DefaultState;
-use std::default::Default;
 use std::sync::Arc;
 
 use bloom::BloomFilter;
@@ -14,10 +11,10 @@ use smallvec::VecLike;
 use quickersort::sort_by;
 use string_cache::Atom;
 
-use fnv::FnvHasher;
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector};
 use tree::Element;
+use hash_map::{self, HashMap};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -43,12 +40,12 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 /// element.
 pub struct SelectorMap<T> {
     // TODO: Tune the initial capacity of the HashMap
-    id_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
-    class_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
-    local_name_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
+    id_hash: HashMap<Atom, Vec<Rule<T>>>,
+    class_hash: HashMap<Atom, Vec<Rule<T>>>,
+    local_name_hash: HashMap<Atom, Vec<Rule<T>>>,
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
-    lower_local_name_hash: HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
+    lower_local_name_hash: HashMap<Atom, Vec<Rule<T>>>,
     // For Rules that don't have ID, class, or element selectors.
     universal_rules: Vec<Rule<T>>,
     /// Whether this hash is empty.
@@ -58,10 +55,10 @@ pub struct SelectorMap<T> {
 impl<T> SelectorMap<T> {
     pub fn new() -> SelectorMap<T> {
         SelectorMap {
-            id_hash: HashMap::with_hash_state(Default::default()),
-            class_hash: HashMap::with_hash_state(Default::default()),
-            local_name_hash: HashMap::with_hash_state(Default::default()),
-            lower_local_name_hash: HashMap::with_hash_state(Default::default()),
+            id_hash: hash_map::new(),
+            class_hash: hash_map::new(),
+            local_name_hash: hash_map::new(),
+            lower_local_name_hash: hash_map::new(),
             universal_rules: vec!(),
             empty: true,
         }
@@ -130,9 +127,7 @@ impl<T> SelectorMap<T> {
 
     fn get_matching_rules_from_hash<E,V>(element: &E,
                                          parent_bf: Option<&BloomFilter>,
-                                         hash: &HashMap<Atom,
-                                                        Vec<Rule<T>>,
-                                                        DefaultState<FnvHasher>>,
+                                         hash: &HashMap<Atom, Vec<Rule<T>>>,
                                          key: &Atom,
                                          matching_rules: &mut V,
                                          shareable: &mut bool)
@@ -817,7 +812,7 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
     element.next_sibling_element().is_none()
 }
 
-fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>, DefaultState<FnvHasher>>,
+fn find_push<T>(map: &mut HashMap<Atom, Vec<Rule<T>>>,
                 key: Atom,
                 value: Rule<T>) {
     if let Some(vec) = map.get_mut(&key) {
