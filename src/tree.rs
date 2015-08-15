@@ -29,6 +29,7 @@ pub trait Element {
     fn get_namespace<'a>(&'a self) -> &'a Namespace;
     fn get_hover_state(&self) -> bool;
     fn get_focus_state(&self) -> bool;
+    fn get_active_state(&self) -> bool;
     fn get_id(&self) -> Option<Atom>;
     fn get_disabled_state(&self) -> bool;
     fn get_enabled_state(&self) -> bool;

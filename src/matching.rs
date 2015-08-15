@@ -665,6 +665,11 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
             *shareable = false;
             element.get_focus_state()
         },
+        // https://html.spec.whatwg.org/multipage/scripting.html#selector-active
+        SimpleSelector::Active => {
+            *shareable = false;
+            element.get_active_state()
+        },
         // http://www.whatwg.org/html/#selector-disabled
         SimpleSelector::Disabled => {
             *shareable = false;
