@@ -81,6 +81,7 @@ pub enum SimpleSelector {
     Visited,
     Hover,
     Focus,
+    Active,
     Disabled,
     Enabled,
     Checked,
@@ -170,7 +171,7 @@ fn compute_specificity(mut selector: &CompoundSelector,
                 &SimpleSelector::AttrSuffixMatch(..) |
                 &SimpleSelector::AnyLink | &SimpleSelector::Link |
                 &SimpleSelector::Visited | &SimpleSelector::Hover |
-                &SimpleSelector::Focus |
+                &SimpleSelector::Focus | &SimpleSelector::Active |
                 &SimpleSelector::Disabled | &SimpleSelector::Enabled |
                 &SimpleSelector::FirstChild | &SimpleSelector::LastChild |
                 &SimpleSelector::OnlyChild | &SimpleSelector::Root |
@@ -612,6 +613,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         "visited" => Ok(SimpleSelector::Visited),
         "hover" => Ok(SimpleSelector::Hover),
         "focus" => Ok(SimpleSelector::Focus),
+        "active" => Ok(SimpleSelector::Active),
         "disabled" => Ok(SimpleSelector::Disabled),
         "enabled" => Ok(SimpleSelector::Enabled),
         "checked" => Ok(SimpleSelector::Checked),
