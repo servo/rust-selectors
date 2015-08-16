@@ -9,7 +9,7 @@ use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
 
 
-pub trait Element {
+pub trait Element: Sized {
     fn parent_element(&self) -> Option<Self>;
 
     // Skips non-element nodes
