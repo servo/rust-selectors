@@ -236,7 +236,7 @@ pub fn parse_selector_list<Impl: SelectorImpl>(context: &ParserContext, input: &
 ///
 /// `Err` means invalid selector.
 fn parse_selector<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parser) -> Result<Selector<Impl>, ()> {
-    let (first, mut pseudo_element) = try!(parse_simple_selectors(context, input));
+    let (first, mut pseudo_element) = try!(parse_simple_selector_sequence(context, input));
     let mut compound = CompoundSelector{ simple_selectors: first, next: None };
 
     'outer_loop: while pseudo_element.is_none() {
@@ -270,7 +270,7 @@ fn parse_selector<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parse
                 }
             }
         }
-        let (simple_selectors, pseudo) = try!(parse_simple_selectors(context, input));
+        let (simple_selectors, pseudo) = try!(parse_simple_selector_sequence(context, input));
         compound = CompoundSelector {
             simple_selectors: simple_selectors,
             next: Some((Arc::new(compound), combinator))
@@ -284,6 +284,25 @@ fn parse_selector<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parse
     })
 }
 
+/// Parse a complete sequence a simple selectors.
+///
+/// This parses a non-empty list of simple selectors, followed by an optional
+/// pseudo_element.
+///
+/// * `Err(())`: Invalid simple selector sequence.
+fn parse_simple_selector_sequence<Impl>(context: &ParserContext, input: &mut Parser)
+                                        -> Result<(Vec<SimpleSelector<Impl>>,
+                                                   Option<Impl::PseudoElement>),
+                                                  ()>
+                                        where Impl: SelectorImpl {
+    let simple_selectors = try!(parse_simple_selectors::<Impl>(context, input));
+    let pseudo_element = try!(parse_pseudo_element::<Impl>(context, input));
+    if simple_selectors.is_empty() && pseudo_element.is_none() {
+        Err(())
+    } else {
+        Ok((simple_selectors, pseudo_element))
+    }
+}
 
 /// * `Err(())`: Invalid selector, abort
 /// * `Ok(None)`: Not a type selector, could be something else. `input` was not consumed.
@@ -313,14 +332,6 @@ fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext, input: &mut 
         }
     }
 }
-
-
-#[derive(Debug)]
-enum SimpleSelectorParseResult<Impl: SelectorImpl> {
-    SimpleSelector(SimpleSelector<Impl>),
-    PseudoElement(Impl::PseudoElement),
-}
-
 
 /// * `Err(())`: Invalid selector, abort
 /// * `Ok(None)`: Not a simple selector, could be something else. `input` was not consumed.
@@ -465,23 +476,28 @@ fn parse_negation<Impl: SelectorImpl>(context: &ParserContext,
             match try!(parse_one_simple_selector(context,
                                                  input,
                                                  /* inside_negation = */ true)) {
-                Some(SimpleSelectorParseResult::SimpleSelector(simple_selector)) => {
+                Some(simple_selector) => {
                     Ok(SimpleSelector::Negation(vec![simple_selector]))
                 }
-                _ => Err(())
+                None => Err(())
             }
         },
     }
 }
 
-/// simple_selector_sequence
-/// : [ type_selector | universal ] [ HASH | class | attrib | pseudo | negation ]*
-/// | [ HASH | class | attrib | pseudo | negation ]+
+/// Parse a sequence of simple selectors.
 ///
-/// `Err(())` means invalid selector
-fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext,
-                                              input: &mut Parser)
-                                              -> Result<(Vec<SimpleSelector<Impl>>, Option<Impl::PseudoElement>), ()> {
+/// If there is any type selector or universal selector, it is the first one in
+/// in the sequence. Pseudo-elements are not considered by this function.
+/// If the vector is empty, there were no simple selectors at all.
+///
+/// [ type_selector | universal ]? [ HASH | class | attrib | negation ]+
+///
+/// * `Err(())`: Invalid sequence, abort.
+fn parse_simple_selectors<Impl>(context: &ParserContext,
+					            input: &mut Parser)
+                                -> Result<Vec<SimpleSelector<Impl>>, ()>
+                                where Impl: SelectorImpl {
     // Consume any leading whitespace.
     loop {
         let position = input.position();
@@ -490,35 +506,17 @@ fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext,
             break
         }
     }
-    let mut empty = true;
-    let mut simple_selectors = match try!(parse_type_selector(context, input)) {
-        None => vec![],
-        Some(s) => { empty = false; s }
-    };
-
-    let mut pseudo_element = None;
+    let mut simple_selectors =
+        try!(parse_type_selector(context, input)).unwrap_or(vec![]);
     loop {
         match try!(parse_one_simple_selector(context,
                                              input,
                                              /* inside_negation = */ false)) {
             None => break,
-            Some(SimpleSelectorParseResult::SimpleSelector(s)) => {
-                simple_selectors.push(s);
-                empty = false
-            }
-            Some(SimpleSelectorParseResult::PseudoElement(p)) => {
-                pseudo_element = Some(p);
-                empty = false;
-                break
-            }
+            Some(s) => simple_selectors.push(s),
         }
     }
-    if empty {
-        // An empty selector is invalid.
-        Err(())
-    } else {
-        Ok((simple_selectors, pseudo_element))
-    }
+    Ok(simple_selectors)
 }
 
 fn parse_functional_pseudo_class<Impl: SelectorImpl>(context: &ParserContext,
@@ -552,24 +550,23 @@ where F: FnOnce(i32, i32) -> SimpleSelector<Impl> {
 
 /// Parse a simple selector other than a type selector.
 ///
-/// * `Err(())`: Invalid selector, abort
-/// * `Ok(None)`: Not a simple selector, could be something else. `input` was not consumed.
-/// * `Ok(Some(_))`: Parsed a simple selector or pseudo-element
-fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext,
-                             input: &mut Parser,
-                             inside_negation: bool)
-                             -> Result<Option<SimpleSelectorParseResult<Impl>>,()> {
+/// * `Err(())`: Invalid selector, abort.
+/// * `Ok(None)`: Not a simple selector, could be something else; `input` was not consumed.
+/// * `Ok(Some(_))`: Parsed a simple selector.
+fn parse_one_simple_selector<Impl>(context: &ParserContext,
+                                   input: &mut Parser,
+                                   inside_negation: bool)
+                                   -> Result<Option<SimpleSelector<Impl>>, ()>
+                                   where Impl: SelectorImpl {
     let start_position = input.position();
     match input.next_including_whitespace() {
         Ok(Token::IDHash(id)) => {
-            let id = SimpleSelector::ID(Atom::from(&*id));
-            Ok(Some(SimpleSelectorParseResult::SimpleSelector(id)))
+            Ok(Some(SimpleSelector::ID(Atom::from(&*id))))
         }
         Ok(Token::Delim('.')) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(class)) => {
-                    let class = SimpleSelector::Class(Atom::from(&*class));
-                    Ok(Some(SimpleSelectorParseResult::SimpleSelector(class)))
+                    Ok(Some(SimpleSelector::Class(Atom::from(&*class))))
                 }
                 _ => Err(()),
             }
@@ -578,38 +575,30 @@ fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext,
             let attr = try!(input.parse_nested_block(|input| {
                 parse_attribute_selector(context, input)
             }));
-            Ok(Some(SimpleSelectorParseResult::SimpleSelector(attr)))
+            Ok(Some(attr))
         }
         Ok(Token::Colon) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(name)) => {
-                    // Supported CSS 2.1 pseudo-elements only.
-                    // ** Do not add to this list! **
-                    if name.eq_ignore_ascii_case("before") ||
-                       name.eq_ignore_ascii_case("after") ||
-                       name.eq_ignore_ascii_case("first-line") ||
-                       name.eq_ignore_ascii_case("first-letter") {
-                        let pseudo_element = try!(Impl::parse_pseudo_element(context, &name));
-                        Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
-                    } else {
-                        let pseudo_class = try!(parse_simple_pseudo_class(context, &name));
-                        Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo_class)))
+                    match parse_simple_pseudo_class(context, &name) {
+                        Ok(pseudo_class) => Ok(Some(pseudo_class)),
+                        Err(()) => {
+                            // Errors could be CSS 2.1 pseudo-elements.
+                            input.reset(start_position);
+                            Ok(None)
+                        },
                     }
                 }
                 Ok(Token::Function(name)) => {
                     let pseudo = try!(input.parse_nested_block(|input| {
                         parse_functional_pseudo_class(context, input, &name, inside_negation)
                     }));
-                    Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo)))
+                    Ok(Some(pseudo))
                 }
                 Ok(Token::Colon) => {
-                    match input.next() {
-                        Ok(Token::Ident(name)) => {
-                            let pseudo = try!(Impl::parse_pseudo_element(context, &name));
-                            Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo)))
-                        }
-                        _ => Err(())
-                    }
+                    // Could be a pseudo-element.
+                    input.reset(start_position);
+                    Ok(None)
                 }
                 _ => Err(())
             }
@@ -632,6 +621,50 @@ fn parse_simple_pseudo_class<Impl: SelectorImpl>(context: &ParserContext, name: 
         "last-of-type"  => Ok(SimpleSelector::LastOfType),
         "only-of-type"  => Ok(SimpleSelector::OnlyOfType),
         _ => Impl::parse_non_ts_pseudo_class(context, name).map(|pc| SimpleSelector::NonTSPseudoClass(pc))
+    }
+}
+
+/// Parse a pseudo-element.
+///
+/// * `Err(())`: Invalid pseudo-element, abort.
+/// * `Ok(None)`: Not a pseudo-element, could be something else; `input` was not consumed.
+/// * `Ok(Some(_))`: Parsed a pseudo-element.
+fn parse_pseudo_element<Impl>(context: &ParserContext, input: &mut Parser)
+                              -> Result<Option<Impl::PseudoElement>, ()>
+                              where Impl: SelectorImpl {
+    let start_position = input.position();
+    if input.next_including_whitespace() != Ok(Token::Colon) {
+        input.reset(start_position);
+        return Ok(None);
+    }
+    let name = match input.next_including_whitespace() {
+        Ok(Token::Ident(name)) => {
+            if is_legacy_pseudo_element(&name) {
+                // CSS 2.1 pseudo-element.
+                name
+            } else {
+                return Err(());
+            }
+        },
+        Ok(Token::Colon) => {
+            if let Ok(Token::Ident(name)) = input.next_including_whitespace() {
+                name
+            } else {
+                return Err(());
+            }
+        },
+        _ => return Err(()),
+    };
+    Impl::parse_pseudo_element(context, &name).map(Some)
+}
+
+fn is_legacy_pseudo_element(name: &str) -> bool {
+    match_ignore_ascii_case! { name,
+        "before" => true,
+        "after" => true,
+        "first-line" => true,
+        "first-letter" => true,
+        _ => false
     }
 }
 
