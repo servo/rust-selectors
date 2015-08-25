@@ -108,7 +108,7 @@ impl<Impl: SelectorImpl> ParserContext<Impl> {
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone)]
 pub struct Selector<Impl: SelectorImpl> {
-    pub compound_selectors: Arc<CompoundSelector<Impl>>,
+    pub complex_selector: Arc<ComplexSelector<Impl>>,
     pub pseudo_element: Option<Impl::PseudoElement>,
     pub specificity: u32,
 }
@@ -158,20 +158,20 @@ impl<Impl: SelectorImpl> Selector<Impl> {
     /// Whether this selector, if matching on a set of siblings, could affect
     /// other sibling's style.
     pub fn affects_siblings(&self) -> bool {
-        match self.compound_selectors.next {
+        match self.complex_selector.next {
             Some((_, Combinator::NextSibling)) |
             Some((_, Combinator::LaterSibling)) => return true,
             _ => {},
         }
 
-        match self.compound_selectors.simple_selectors.last() {
+        match self.complex_selector.compound_selector.last() {
             Some(ref selector) => affects_sibling(selector),
             None => false,
         }
     }
 
     pub fn matches_non_common_style_affecting_attribute(&self) -> bool {
-        match self.compound_selectors.simple_selectors.last() {
+        match self.complex_selector.compound_selector.last() {
             Some(ref selector) => matches_non_common_style_affecting_attribute(selector),
             None => false,
         }
@@ -180,9 +180,9 @@ impl<Impl: SelectorImpl> Selector<Impl> {
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone)]
-pub struct CompoundSelector<Impl: SelectorImpl> {
-    pub simple_selectors: Vec<SimpleSelector<Impl>>,
-    pub next: Option<(Arc<CompoundSelector<Impl>>, Combinator)>,  // c.next is left of c
+pub struct ComplexSelector<Impl: SelectorImpl> {
+    pub compound_selector: Vec<SimpleSelector<Impl>>,
+    pub next: Option<(Arc<ComplexSelector<Impl>>, Combinator)>,  // c.next is left of c
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
@@ -283,7 +283,7 @@ impl<Impl: SelectorImpl> Debug for Selector<Impl> {
     }
 }
 
-impl<Impl: SelectorImpl> Debug for CompoundSelector<Impl> {
+impl<Impl: SelectorImpl> Debug for ComplexSelector<Impl> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.to_css(f) }
 }
 impl<Impl: SelectorImpl> Debug for SimpleSelector<Impl> {
@@ -301,7 +301,7 @@ impl<Impl: SelectorImpl> Debug for LocalName<Impl> {
 
 impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
-        try!(self.compound_selectors.to_css(dest));
+        try!(self.complex_selector.to_css(dest));
         if let Some(ref pseudo) = self.pseudo_element {
             try!(pseudo.to_css(dest));
         }
@@ -309,13 +309,13 @@ impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
     }
 }
 
-impl<Impl: SelectorImpl> ToCss for CompoundSelector<Impl> {
+impl<Impl: SelectorImpl> ToCss for ComplexSelector<Impl> {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
         if let Some((ref next, ref combinator)) = self.next {
             try!(next.to_css(dest));
             try!(combinator.to_css(dest));
         }
-        for simple in &self.simple_selectors {
+        for simple in &self.compound_selector {
             try!(simple.to_css(dest));
         }
         Ok(())
@@ -460,7 +460,7 @@ fn display_to_css_identifier<T: Display, W: fmt::Write>(x: &T, dest: &mut W) -> 
     serialize_identifier(&string, dest)
 }
 
-fn compute_specificity<Impl: SelectorImpl>(mut selector: &CompoundSelector<Impl>,
+fn compute_specificity<Impl: SelectorImpl>(mut selector: &ComplexSelector<Impl>,
                                            pseudo_element: &Option<Impl::PseudoElement>) -> u32 {
     struct Specificity {
         id_selectors: u32,
@@ -474,20 +474,21 @@ fn compute_specificity<Impl: SelectorImpl>(mut selector: &CompoundSelector<Impl>
     };
     if pseudo_element.is_some() { specificity.element_selectors += 1 }
 
-    simple_selectors_specificity(&selector.simple_selectors, &mut specificity);
+    compound_selector_specificity(&selector.compound_selector, &mut specificity);
     loop {
         match selector.next {
             None => break,
             Some((ref next_selector, _)) => {
                 selector = &**next_selector;
-                simple_selectors_specificity(&selector.simple_selectors, &mut specificity)
+                compound_selector_specificity(&selector.compound_selector, &mut specificity)
             }
         }
     }
 
-    fn simple_selectors_specificity<Impl: SelectorImpl>(simple_selectors: &[SimpleSelector<Impl>],
-                                                        specificity: &mut Specificity) {
-        for simple_selector in simple_selectors.iter() {
+    fn compound_selector_specificity<Impl: SelectorImpl>(
+            compound_selector: &[SimpleSelector<Impl>],
+            specificity: &mut Specificity) {
+        for simple_selector in compound_selector.iter() {
             match *simple_selector {
                 SimpleSelector::LocalName(..) =>
                     specificity.element_selectors += 1,
@@ -516,7 +517,7 @@ fn compute_specificity<Impl: SelectorImpl>(mut selector: &CompoundSelector<Impl>
 
                 SimpleSelector::Namespace(..) => (),
                 SimpleSelector::Negation(ref negated) =>
-                    simple_selectors_specificity(negated, specificity),
+                    compound_selector_specificity(negated, specificity),
             }
         }
     }
@@ -550,8 +551,8 @@ pub fn parse_selector_list<Impl: SelectorImpl>(context: &ParserContext<Impl>, in
 /// `Err` means invalid selector.
 fn parse_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut Parser)
                                       -> Result<Selector<Impl>, ()> {
-    let (first, mut pseudo_element) = try!(parse_simple_selectors(context, input));
-    let mut compound = CompoundSelector{ simple_selectors: first, next: None };
+    let (first, mut pseudo_element) = try!(parse_compound_selector(context, input));
+    let mut complex = ComplexSelector{ compound_selector: first, next: None };
 
     'outer_loop: while pseudo_element.is_none() {
         let combinator;
@@ -584,16 +585,16 @@ fn parse_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut
                 }
             }
         }
-        let (simple_selectors, pseudo) = try!(parse_simple_selectors(context, input));
-        compound = CompoundSelector {
-            simple_selectors: simple_selectors,
-            next: Some((Arc::new(compound), combinator))
+        let (compound_selector, pseudo) = try!(parse_compound_selector(context, input));
+        complex = ComplexSelector {
+            compound_selector: compound_selector,
+            next: Some((Arc::new(complex), combinator))
         };
         pseudo_element = pseudo;
     }
     Ok(Selector {
-        specificity: compute_specificity(&compound, &pseudo_element),
-        compound_selectors: Arc::new(compound),
+        specificity: compute_specificity(&complex, &pseudo_element),
+        complex_selector: Arc::new(complex),
         pseudo_element: pseudo_element,
     })
 }
@@ -607,23 +608,23 @@ fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input:
     match try!(parse_qualified_name(context, input, /* in_attr_selector = */ false)) {
         None => Ok(None),
         Some((namespace, local_name)) => {
-            let mut simple_selectors = vec!();
+            let mut compound_selector = vec!();
             match namespace {
                 NamespaceConstraint::Specific(ns) => {
-                    simple_selectors.push(SimpleSelector::Namespace(ns))
+                    compound_selector.push(SimpleSelector::Namespace(ns))
                 },
                 NamespaceConstraint::Any => (),
             }
             match local_name {
                 Some(name) => {
-                    simple_selectors.push(SimpleSelector::LocalName(LocalName {
+                    compound_selector.push(SimpleSelector::LocalName(LocalName {
                         lower_name: Impl::LocalName::from_cow_str(name.to_ascii_lowercase().into()),
                         name: Impl::LocalName::from_cow_str(name),
                     }))
                 }
                 None => (),
             }
-            Ok(Some(simple_selectors))
+            Ok(Some(compound_selector))
         }
     }
 }
@@ -789,7 +790,7 @@ fn parse_negation<Impl: SelectorImpl>(context: &ParserContext<Impl>,
                                                  input,
                                                  /* inside_negation = */ true)) {
                 Some(SimpleSelectorParseResult::SimpleSelector(simple_selector)) => {
-                    let simple_selectors = match context.default_namespace {
+                    let compound_selector = match context.default_namespace {
                         // If there was no explicit type selector, but there is
                         // a default namespace, there is an implicit
                         // "<defaultns>|*" type selector before simple_selector.
@@ -799,7 +800,7 @@ fn parse_negation<Impl: SelectorImpl>(context: &ParserContext<Impl>,
                         }), simple_selector],
                         None => vec![simple_selector],
                     };
-                    Ok(SimpleSelector::Negation(simple_selectors))
+                    Ok(SimpleSelector::Negation(compound_selector))
                 }
                 _ => Err(())
             }
@@ -812,9 +813,9 @@ fn parse_negation<Impl: SelectorImpl>(context: &ParserContext<Impl>,
 /// | [ HASH | class | attrib | pseudo | negation ]+
 ///
 /// `Err(())` means invalid selector
-fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext<Impl>,
-                                              input: &mut Parser)
-                                              -> Result<(Vec<SimpleSelector<Impl>>, Option<Impl::PseudoElement>), ()> {
+fn parse_compound_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>,
+                                               input: &mut Parser)
+                                               -> Result<(Vec<SimpleSelector<Impl>>, Option<Impl::PseudoElement>), ()> {
     // Consume any leading whitespace.
     loop {
         let position = input.position();
@@ -824,7 +825,7 @@ fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext<Impl>,
         }
     }
     let mut empty = true;
-    let mut simple_selectors = match try!(parse_type_selector(context, input)) {
+    let mut compound_selector = match try!(parse_type_selector(context, input)) {
         None => {
             match context.default_namespace {
                 // If there was no explicit type selector, but there is a
@@ -847,7 +848,7 @@ fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext<Impl>,
                                              /* inside_negation = */ false)) {
             None => break,
             Some(SimpleSelectorParseResult::SimpleSelector(s)) => {
-                simple_selectors.push(s);
+                compound_selector.push(s);
                 empty = false
             }
             Some(SimpleSelectorParseResult::PseudoElement(p)) => {
@@ -861,7 +862,7 @@ fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext<Impl>,
         // An empty selector is invalid.
         Err(())
     } else {
-        Ok((simple_selectors, pseudo_element))
+        Ok((compound_selector, pseudo_element))
     }
 }
 
@@ -1104,8 +1105,8 @@ pub mod tests {
         assert_eq!(parse(":lang(4)"), Err(())) ;
         assert_eq!(parse(":lang(en US)"), Err(())) ;
         assert_eq!(parse("EeÉ"), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(SimpleSelector::LocalName(LocalName {
                     name: String::from("EeÉ"),
                     lower_name: String::from("eeÉ") })),
                 next: None,
@@ -1114,8 +1115,8 @@ pub mod tests {
             specificity: specificity(0, 0, 1),
         })));
         assert_eq!(parse(".foo:lang(en-US)"), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec![
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec![
                     SimpleSelector::Class(String::from("foo")),
                     SimpleSelector::NonTSPseudoClass(PseudoClass::Lang("en-US".to_owned()))
                 ],
@@ -1125,16 +1126,16 @@ pub mod tests {
             specificity: specificity(0, 2, 0),
         })));
         assert_eq!(parse("#bar"), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::ID(String::from("bar"))),
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(SimpleSelector::ID(String::from("bar"))),
                 next: None,
             }),
             pseudo_element: None,
             specificity: specificity(1, 0, 0),
         })));
         assert_eq!(parse("e.foo#bar"), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(SimpleSelector::LocalName(LocalName {
                                             name: String::from("e"),
                                             lower_name: String::from("e") }),
                                        SimpleSelector::Class(String::from("foo")),
@@ -1145,10 +1146,10 @@ pub mod tests {
             specificity: specificity(1, 1, 1),
         })));
         assert_eq!(parse("e.foo #bar"), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::ID(String::from("bar"))),
-                next: Some((Arc::new(CompoundSelector {
-                    simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(SimpleSelector::ID(String::from("bar"))),
+                next: Some((Arc::new(ComplexSelector {
+                    compound_selector: vec!(SimpleSelector::LocalName(LocalName {
                                                 name: String::from("e"),
                                                 lower_name: String::from("e") }),
                                            SimpleSelector::Class(String::from("foo"))),
@@ -1162,8 +1163,8 @@ pub mod tests {
         // https://github.com/mozilla/servo/pull/1652
         let mut context = ParserContext::new();
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::AttrExists(AttrSelector {
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(SimpleSelector::AttrExists(AttrSelector {
                     name: String::from("Foo"),
                     lower_name: String::from("foo"),
                     namespace: NamespaceConstraint::Specific(Namespace {
@@ -1179,8 +1180,8 @@ pub mod tests {
         assert_eq!(parse_ns("svg|circle", &context), Err(()));
         context.namespace_prefixes.insert("svg".into(), SVG.into());
         assert_eq!(parse_ns("svg|circle", &context), Ok(vec![Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec![
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec![
                     SimpleSelector::Namespace(Namespace {
                         prefix: Some("svg".into()),
                         url: SVG.into(),
@@ -1201,8 +1202,8 @@ pub mod tests {
         // https://github.com/servo/rust-selectors/pull/82
         context.default_namespace = Some(MATHML.into());
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec![
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec![
                     SimpleSelector::Namespace(Namespace {
                         prefix: None,
                         url: MATHML.into(),
@@ -1223,8 +1224,8 @@ pub mod tests {
         })));
         // Default namespace does apply to type selectors
         assert_eq!(parse_ns("e", &context), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(
                     SimpleSelector::Namespace(Namespace {
                         prefix: None,
                         url: MATHML.into(),
@@ -1239,8 +1240,8 @@ pub mod tests {
             specificity: specificity(0, 0, 1),
         })));
         assert_eq!(parse("[attr |= \"foo\"]"), Ok(vec![Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec![
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec![
                     SimpleSelector::AttrDashMatch(AttrSelector {
                         name: String::from("attr"),
                         lower_name: String::from("attr"),
@@ -1257,18 +1258,18 @@ pub mod tests {
         }]));
         // https://github.com/mozilla/servo/issues/1723
         assert_eq!(parse("::before"), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(),
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(),
                 next: None,
             }),
             pseudo_element: Some(PseudoElement::Before),
             specificity: specificity(0, 0, 1),
         })));
         assert_eq!(parse("div ::after"), Ok(vec!(Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(),
-                next: Some((Arc::new(CompoundSelector {
-                    simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(),
+                next: Some((Arc::new(ComplexSelector {
+                    compound_selector: vec!(SimpleSelector::LocalName(LocalName {
                         name: String::from("div"),
                         lower_name: String::from("div") })),
                     next: None,
@@ -1278,12 +1279,12 @@ pub mod tests {
             specificity: specificity(0, 0, 2),
         })));
         assert_eq!(parse("#d1 > .ok"), Ok(vec![Selector {
-            compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec![
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec![
                     SimpleSelector::Class(String::from("ok")),
                 ],
-                next: Some((Arc::new(CompoundSelector {
-                    simple_selectors: vec![
+                next: Some((Arc::new(ComplexSelector {
+                    compound_selector: vec![
                         SimpleSelector::ID(String::from("d1")),
                     ],
                     next: None,
