@@ -277,7 +277,8 @@ fn parse_selector(context: &ParserContext, input: &mut Parser) -> Result<Selecto
 /// * `Err(())`: Invalid simple selector sequence.
 fn parse_simple_selector_sequence(context: &ParserContext, input: &mut Parser)
                                   -> Result<(Vec<SimpleSelector>, Option<PseudoElement>), ()> {
-    let simple_selectors = try!(parse_simple_selectors(context, input));
+    let simple_selectors =
+        try!(parse_simple_selectors(context, input, /* inside_negation = */ false));
     let pseudo_element = try!(parse_pseudo_element(input));
     if simple_selectors.is_empty() && pseudo_element.is_none() {
         Err(())
@@ -447,21 +448,17 @@ fn parse_attribute_flags(input: &mut Parser) -> Result<CaseSensitivity, ()> {
     }
 }
 
-
-/// Level 3: Parse **one** simple_selector
-fn parse_negation(context: &ParserContext, input: &mut Parser) -> Result<SimpleSelector,()> {
-    match try!(parse_type_selector(context, input)) {
-        Some(type_selector) => Ok(SimpleSelector::Negation(type_selector)),
-        None => {
-            match try!(parse_one_simple_selector(context,
-                                                 input,
-                                                 /* inside_negation = */ true)) {
-                Some(simple_selector) => {
-                    Ok(SimpleSelector::Negation(vec![simple_selector]))
-                }
-                None => Err(())
-            }
-        },
+/// Parse a negation pseudo-class (`:not()`).
+///
+/// * `Err(())`: Invalid negation, abort.
+fn parse_negation(context: &ParserContext, input: &mut Parser)
+                  -> Result<SimpleSelector, ()> {
+    let selectors =
+        try!(parse_simple_selectors(context, input, /* inside_negation = */ true));
+    if selectors.is_empty() {
+        Err(())
+    } else {
+        Ok(SimpleSelector::Negation(selectors))
     }
 }
 
@@ -474,7 +471,8 @@ fn parse_negation(context: &ParserContext, input: &mut Parser) -> Result<SimpleS
 /// [ type_selector | universal ]? [ HASH | class | attrib | negation ]+
 ///
 /// * `Err(())`: Invalid sequence, abort.
-fn parse_simple_selectors(context: &ParserContext, input: &mut Parser)
+fn parse_simple_selectors(context: &ParserContext, input: &mut Parser,
+                          inside_negation: bool)
                           -> Result<Vec<SimpleSelector>, ()> {
     // Consume any leading whitespace.
     loop {
@@ -489,7 +487,7 @@ fn parse_simple_selectors(context: &ParserContext, input: &mut Parser)
     loop {
         match try!(parse_one_simple_selector(context,
                                              input,
-                                             /* inside_negation = */ false)) {
+                                             inside_negation)) {
             None => break,
             Some(s) => simple_selectors.push(s),
         }
@@ -815,6 +813,45 @@ mod tests {
             }),
             pseudo_element: None,
             specificity: (1 << 20) + (1 << 10) + (0 << 0),
-        }]))
+        }]));
+        assert_eq!(parse("button:not([DISABLED])"), Ok(vec![Selector {
+            compound_selectors: Arc::new(CompoundSelector {
+                simple_selectors: vec![
+                    SimpleSelector::LocalName(LocalName {
+                        name: atom!(button),
+                        lower_name: atom!(button),
+                    }),
+                    SimpleSelector::Negation(vec![
+                        SimpleSelector::AttrExists(AttrSelector {
+                            name: Atom::from_slice("DISABLED"),
+                            lower_name: atom!(disabled),
+                            namespace: NamespaceConstraint::Specific(ns!("")),
+                        }),
+                    ]),
+                ],
+                next: None
+            }),
+            pseudo_element: None,
+            specificity: 1025,
+        }]));
+        assert_eq!(parse(":not(foo.bar)"), Ok(vec![Selector {
+            compound_selectors: Arc::new(CompoundSelector {
+                simple_selectors: vec![
+                    SimpleSelector::Negation(vec![
+                        SimpleSelector::LocalName(LocalName {
+                            name: Atom::from_slice("foo"),
+                            lower_name: Atom::from_slice("foo")
+                        }),
+                        SimpleSelector::Class(Atom::from_slice("bar")),
+                    ])
+                ],
+                next: None
+            }),
+            pseudo_element: None,
+            specificity: 1025,
+        }]));
+        assert_eq!(parse(":not()"), Err(()));
+        assert_eq!(parse(":not(foo:before)"), Err(()));
+        assert_eq!(parse(":not(:not(foo))"), Err(()));
     }
 }
