@@ -5,8 +5,11 @@
 use std::ascii::AsciiExt;
 use std::borrow::Cow;
 use std::cmp;
+use std::convert::{From, Into};
+use std::default::Default;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Add;
 use std::sync::Arc;
 #[cfg(feature = "heap_size")]
 use heapsize::HeapSizeOf;
@@ -146,36 +149,71 @@ pub enum NamespaceConstraint {
     Specific(Namespace),
 }
 
+const MAX_10BIT: u32 = (1u32 << 10) - 1;
 
-fn compute_specificity<Impl>(mut selector: &ComplexSelector<Impl>,
-                             pseudo_element: &Option<Impl::PseudoElement>)
-                             -> u32
-                             where Impl: SelectorImpl {
-    struct Specificity {
-        id_selectors: u32,
-        class_like_selectors: u32,
-        element_selectors: u32,
-    }
-    let mut specificity = Specificity {
-        id_selectors: 0,
-        class_like_selectors: 0,
-        element_selectors: 0,
-    };
-    if pseudo_element.is_some() { specificity.element_selectors += 1 }
+struct Specificity {
+    id_selectors: u32,
+    class_like_selectors: u32,
+    element_selectors: u32,
+}
 
-    compound_selector_specificity(&selector.compound_selector,
-                                  &mut specificity);
-    loop {
-        match selector.next {
-            None => break,
-            Some((ref next_selector, _)) => {
-                selector = &**next_selector;
-                compound_selector_specificity(&selector.compound_selector,
-                                              &mut specificity)
-            }
+impl Add for Specificity {
+    type Output = Specificity;
+
+    fn add(self, rhs: Specificity) -> Specificity {
+        Specificity {
+            id_selectors: self.id_selectors + rhs.id_selectors,
+            class_like_selectors:
+                self.class_like_selectors + rhs.class_like_selectors,
+            element_selectors:
+                self.element_selectors + rhs.element_selectors,
         }
     }
+}
 
+impl Default for Specificity {
+    fn default() -> Specificity {
+        Specificity {
+            id_selectors: 0,
+            class_like_selectors: 0,
+            element_selectors: 0,
+        }
+    }
+}
+
+impl From<u32> for Specificity {
+    fn from(value: u32) -> Specificity {
+        assert!(value <= MAX_10BIT << 20 | MAX_10BIT << 10 | MAX_10BIT);
+        Specificity {
+            id_selectors: value >> 20,
+            class_like_selectors: (value >> 10) & MAX_10BIT,
+            element_selectors: value & MAX_10BIT,
+        }
+    }
+}
+
+impl From<Specificity> for u32 {
+    fn from(specificity: Specificity) -> u32 {
+        cmp::min(specificity.id_selectors, MAX_10BIT) << 20
+        | cmp::min(specificity.class_like_selectors, MAX_10BIT) << 10
+        | cmp::min(specificity.element_selectors, MAX_10BIT)
+    }
+}
+
+fn specificity<Impl>(complex_selector: &ComplexSelector<Impl>,
+                     pseudo_element: Option<&Impl::PseudoElement>)
+                     -> u32
+				     where Impl: SelectorImpl {
+    let mut specificity = complex_selector_specificity(complex_selector);
+    if pseudo_element.is_some() {
+        specificity.element_selectors += 1;
+    }
+    specificity.into()
+}
+
+fn complex_selector_specificity<Impl>(mut selector: &ComplexSelector<Impl>)
+                                      -> Specificity
+                                      where Impl: SelectorImpl {
     fn compound_selector_specificity<Impl>(compound_selector: &[SimpleSelector<Impl>],
                                            specificity: &mut Specificity)
                                            where Impl: SelectorImpl {
@@ -212,10 +250,20 @@ fn compute_specificity<Impl>(mut selector: &ComplexSelector<Impl>,
         }
     }
 
-    static MAX_10BIT: u32 = (1u32 << 10) - 1;
-    cmp::min(specificity.id_selectors, MAX_10BIT) << 20
-    | cmp::min(specificity.class_like_selectors, MAX_10BIT) << 10
-    | cmp::min(specificity.element_selectors, MAX_10BIT)
+    let mut specificity = Default::default();
+    compound_selector_specificity(&selector.compound_selector,
+                              &mut specificity);
+    loop {
+        match selector.next {
+            None => break,
+            Some((ref next_selector, _)) => {
+                selector = &**next_selector;
+                compound_selector_specificity(&selector.compound_selector,
+                                          &mut specificity)
+            }
+        }
+    }
+    specificity
 }
 
 
@@ -246,10 +294,11 @@ fn parse_selector<Impl>(context: &ParserContext, input: &mut Parser)
         try!(parse_complex_selector::<Impl>(context, input));
     let pseudo_element = try!(parse_pseudo_element::<Impl>(context, input));
     if !complex.compound_selector.is_empty() || pseudo_element.is_some() {
+        let specificity = specificity(&complex, pseudo_element.as_ref());
         Ok(Selector {
-            specificity: compute_specificity(&complex, &pseudo_element),
             complex_selector: Arc::new(complex),
             pseudo_element: pseudo_element,
+            specificity: specificity,
         })
     } else {
         Err(())
