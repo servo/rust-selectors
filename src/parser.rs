@@ -97,6 +97,7 @@ pub enum SimpleSelector {
     LastOfType,
     OnlyOfType,
     ServoNonzeroBorder,
+    Target,
     // ...
 }
 
@@ -178,6 +179,7 @@ fn compute_specificity(mut selector: &CompoundSelector,
                 &SimpleSelector::Empty |
                 &SimpleSelector::Checked |
                 &SimpleSelector::Indeterminate |
+                &SimpleSelector::Target |
                 &SimpleSelector::NthChild(..) |
                 &SimpleSelector::NthLastChild(..) |
                 &SimpleSelector::NthOfType(..) |
@@ -626,6 +628,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         "first-of-type" => Ok(SimpleSelector::FirstOfType),
         "last-of-type"  => Ok(SimpleSelector::LastOfType),
         "only-of-type"  => Ok(SimpleSelector::OnlyOfType),
+        "target"  => Ok(SimpleSelector::Target),
         "-servo-nonzero-border" => {
             if context.in_user_agent_stylesheet {
                 Ok(SimpleSelector::ServoNonzeroBorder)
