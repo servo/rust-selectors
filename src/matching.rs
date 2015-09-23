@@ -690,6 +690,11 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
             *shareable = false;
             element.get_indeterminate_state()
         }
+        // https://html.spec.whatwg.org/multipage/scripting.html#selector-target
+        SimpleSelector::Target => {
+            *shareable = false;
+            element.get_target_state()
+        }
         SimpleSelector::FirstChild => {
             *shareable = false;
             matches_first_child(element)
