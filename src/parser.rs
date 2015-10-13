@@ -411,7 +411,7 @@ fn parse_attribute_selector(context: &ParserContext, input: &mut Parser)
         // [foo|=bar]
         Ok(Token::DashMatch) => {
             let value = try!(parse_value(input));
-            let dashing_value = format!("{:?}-", value);
+            let dashing_value = format!("{}-", value);
             Ok(SimpleSelector::AttrDashMatch(attr, value, dashing_value))
         }
         // [foo^=bar]
@@ -773,6 +773,20 @@ mod tests {
             pseudo_element: None,
             specificity: specificity(0, 0, 1),
         })));
+        assert_eq!(parse("[attr|=\"foo\"]"), Ok(vec![Selector {
+            compound_selectors: Arc::new(CompoundSelector {
+                simple_selectors: vec![
+                    SimpleSelector::AttrDashMatch(AttrSelector {
+                        name: Atom::from_slice("attr"),
+                        lower_name: Atom::from_slice("attr"),
+                        namespace: NamespaceConstraint::Specific(ns!("")),
+                    }, "foo".to_owned(), "foo-".to_owned())
+                ],
+                next: None,
+            }),
+            pseudo_element: None,
+            specificity: specificity(0, 1, 0),
+        }]));
         // https://github.com/mozilla/servo/issues/1723
         assert_eq!(parse("::before"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
