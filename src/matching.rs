@@ -38,6 +38,7 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 /// Hence, the union of the rules keyed on each of element's classes, ID,
 /// element name, etc. will contain the Rules that actually match that
 /// element.
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct SelectorMap<T> {
     // TODO: Tune the initial capacity of the HashMap
     id_hash: HashMap<Atom, Vec<Rule<T>>>,
@@ -232,7 +233,7 @@ impl<T> SelectorMap<T> {
 // rapidly increase.
 pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: usize = 4096;
 
-
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct Rule<T> {
     // This is an Arc because Rule will essentially be cloned for every element
     // that it matches. Selector contains an owned vector (through
@@ -243,6 +244,7 @@ pub struct Rule<T> {
 
 /// A property declaration together with its precedence among rules of equal specificity so that
 /// we can sort them.
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Debug)]
 pub struct DeclarationBlock<T> {
     pub declarations: Arc<T>,

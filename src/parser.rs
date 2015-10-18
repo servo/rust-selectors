@@ -28,7 +28,7 @@ impl ParserContext {
     }
 }
 
-
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone, Debug)]
 pub struct Selector {
     pub compound_selectors: Arc<CompoundSelector>,
@@ -36,6 +36,7 @@ pub struct Selector {
     pub specificity: u32,
 }
 
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Eq, PartialEq, Clone, Hash, Copy, Debug)]
 pub enum PseudoElement {
     Before,
@@ -43,13 +44,14 @@ pub enum PseudoElement {
     // ...
 }
 
-
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone, Debug)]
 pub struct CompoundSelector {
     pub simple_selectors: Vec<SimpleSelector>,
     pub next: Option<(Box<CompoundSelector>, Combinator)>,  // c.next is left of c
 }
 
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Combinator {
     Child,  //  >
@@ -58,6 +60,7 @@ pub enum Combinator {
     LaterSibling,  // ~
 }
 
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 pub enum SimpleSelector {
     ID(Atom),
@@ -103,6 +106,7 @@ pub enum SimpleSelector {
 
 
 #[derive(Eq, PartialEq, Clone, Hash, Copy, Debug)]
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub enum CaseSensitivity {
     CaseSensitive,  // Selectors spec says language-defined, but HTML says sensitive.
     CaseInsensitive,
@@ -110,12 +114,14 @@ pub enum CaseSensitivity {
 
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct LocalName {
     pub name: Atom,
     pub lower_name: Atom,
 }
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct AttrSelector {
     pub name: Atom,
     pub lower_name: Atom,
@@ -123,6 +129,7 @@ pub struct AttrSelector {
 }
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub enum NamespaceConstraint {
     Any,
     Specific(Namespace),
