@@ -3,7 +3,7 @@ rust-selectors
 
 [![Build Status](https://travis-ci.org/servo/rust-selectors.svg?branch=master)](https://travis-ci.org/servo/rust-selectors)
 
-[Documenation](http://doc.servo.org/selectors/)
+[Documentation](http://doc.servo.org/selectors/)
 
 A CSS Selectors matching library extracted
 from [Servo](https://github.com/servo/servo)
