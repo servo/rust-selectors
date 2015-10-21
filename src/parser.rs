@@ -48,7 +48,7 @@ pub enum PseudoElement {
 #[derive(PartialEq, Clone, Debug)]
 pub struct CompoundSelector {
     pub simple_selectors: Vec<SimpleSelector>,
-    pub next: Option<(Box<CompoundSelector>, Combinator)>,  // c.next is left of c
+    pub next: Option<(Arc<CompoundSelector>, Combinator)>,  // c.next is left of c
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
@@ -265,7 +265,7 @@ fn parse_selector(context: &ParserContext, input: &mut Parser) -> Result<Selecto
         let (simple_selectors, pseudo) = try!(parse_simple_selectors(context, input));
         compound = CompoundSelector {
             simple_selectors: simple_selectors,
-            next: Some((Box::new(compound), combinator))
+            next: Some((Arc::new(compound), combinator))
         };
         pseudo_element = pseudo;
     }
@@ -722,7 +722,7 @@ mod tests {
         assert_eq!(parse("e.foo #bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::ID(Atom::from_slice("bar"))),
-                next: Some((Box::new(CompoundSelector {
+                next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
                                                 name: Atom::from_slice("e"),
                                                 lower_name: Atom::from_slice("e") }),
@@ -803,7 +803,7 @@ mod tests {
         assert_eq!(parse("div :after"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(),
-                next: Some((Box::new(CompoundSelector {
+                next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
                         name: atom!("div"),
                         lower_name: atom!("div") })),
@@ -818,7 +818,7 @@ mod tests {
                 simple_selectors: vec![
                     SimpleSelector::Class(Atom::from_slice("ok")),
                 ],
-                next: Some((Box::new(CompoundSelector {
+                next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec![
                         SimpleSelector::ID(Atom::from_slice("d1")),
                     ],
