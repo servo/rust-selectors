@@ -55,7 +55,7 @@ pub enum PseudoElement {
 #[derive(PartialEq, Clone, Debug)]
 pub struct CompoundSelector {
     pub simple_selectors: Vec<SimpleSelector>,
-    pub next: Option<(Box<CompoundSelector>, Combinator)>,  // c.next is left of c
+    pub next: Option<(Arc<CompoundSelector>, Combinator)>,  // c.next is left of c
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
@@ -267,7 +267,7 @@ fn parse_selector(context: &ParserContext, input: &mut Parser) -> Result<Selecto
         let (simple_selectors, pseudo) = try!(parse_simple_selectors(context, input));
         compound = CompoundSelector {
             simple_selectors: simple_selectors,
-            next: Some((Box::new(compound), combinator))
+            next: Some((Arc::new(compound), combinator))
         };
         pseudo_element = pseudo;
     }
