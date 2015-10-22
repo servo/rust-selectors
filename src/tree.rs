@@ -35,7 +35,6 @@ pub trait Element: Sized {
     fn get_enabled_state(&self) -> bool;
     fn get_checked_state(&self) -> bool;
     fn get_indeterminate_state(&self) -> bool;
-    fn get_target_state(&self) -> bool;
     fn has_class(&self, name: &Atom) -> bool;
     fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
 
