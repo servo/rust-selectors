@@ -5,6 +5,7 @@
 //! Traits that nodes must implement. Breaks the otherwise-cyclic dependency between layout and
 //! style.
 
+use event_state::EventState;
 use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
 
@@ -27,15 +28,8 @@ pub trait Element: Sized {
     fn is_html_element_in_html_document(&self) -> bool;
     fn get_local_name<'a>(&'a self) -> &'a Atom;
     fn get_namespace<'a>(&'a self) -> &'a Namespace;
-    fn get_hover_state(&self) -> bool;
-    fn get_focus_state(&self) -> bool;
-    fn get_active_state(&self) -> bool;
+    fn get_state(&self) -> EventState;
     fn get_id(&self) -> Option<Atom>;
-    fn get_disabled_state(&self) -> bool;
-    fn get_enabled_state(&self) -> bool;
-    fn get_checked_state(&self) -> bool;
-    fn get_indeterminate_state(&self) -> bool;
-    fn get_target_state(&self) -> bool;
     fn has_class(&self, name: &Atom) -> bool;
     fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
 
