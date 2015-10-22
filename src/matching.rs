@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use bloom::BloomFilter;
+use event_state::*;
 use smallvec::VecLike;
 use quickersort::sort_by;
 use string_cache::Atom;
@@ -660,37 +661,37 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
         SimpleSelector::Hover => {
             *shareable = false;
-            element.get_hover_state()
+            element.get_state().contains(IN_HOVER_STATE)
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-focus
         SimpleSelector::Focus => {
             *shareable = false;
-            element.get_focus_state()
+            element.get_state().contains(IN_FOCUS_STATE)
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-active
         SimpleSelector::Active => {
             *shareable = false;
-            element.get_active_state()
+            element.get_state().contains(IN_ACTIVE_STATE)
         },
         // http://www.whatwg.org/html/#selector-disabled
         SimpleSelector::Disabled => {
             *shareable = false;
-            element.get_disabled_state()
+            element.get_state().contains(IN_DISABLED_STATE)
         },
         // http://www.whatwg.org/html/#selector-enabled
         SimpleSelector::Enabled => {
             *shareable = false;
-            element.get_enabled_state()
+            element.get_state().contains(IN_ENABLED_STATE)
         },
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-checked
         SimpleSelector::Checked => {
             *shareable = false;
-            element.get_checked_state()
+            element.get_state().contains(IN_CHECKED_STATE)
         }
         // https://html.spec.whatwg.org/multipage/scripting.html#selector-indeterminate
         SimpleSelector::Indeterminate => {
             *shareable = false;
-            element.get_indeterminate_state()
+            element.get_state().contains(IN_INDETERMINATE_STATE)
         }
         SimpleSelector::FirstChild => {
             *shareable = false;
