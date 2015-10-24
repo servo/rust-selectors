@@ -5,7 +5,8 @@
 macro_rules! module {
     ($(
         $(#[$Flag_attr: meta])*
-        event $css: expr => $variant: ident / $flag: ident = $value: expr,
+        event $css: expr => $variant: ident / $method: ident /
+        $flag: ident = $value: expr,
     )+) => {
 
 use std::ascii::AsciiExt;

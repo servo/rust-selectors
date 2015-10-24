@@ -5,7 +5,8 @@
 macro_rules! module {
     ($(
         $(#[$Flag_attr: meta])*
-        event $css: expr => $variant: ident / $flag: ident = $value: expr,
+        event $css: expr => $variant: ident / $method: ident /
+        $flag: ident = $value: expr,
     )+) => {
 
 use std::ascii::AsciiExt;
@@ -13,7 +14,6 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use bloom::BloomFilter;
-use event_state::*;
 use smallvec::VecLike;
 use quickersort::sort_by;
 use string_cache::Atom;
@@ -667,7 +667,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
         $(
             SimpleSelector::$variant => {
                 *shareable = false;
-                element.get_state().contains($flag)
+                element.$method()
             },
         )+
         SimpleSelector::FirstChild => {
