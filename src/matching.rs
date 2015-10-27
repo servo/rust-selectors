@@ -5,7 +5,7 @@
 macro_rules! module {
     ($(
         $(#[$Flag_attr: meta])*
-        event $css: expr => $variant: ident / $method: ident /
+        state $css: expr => $variant: ident / $method: ident /
         $flag: ident = $value: expr,
     )+) => {
 
@@ -890,4 +890,4 @@ mod tests {
 // End of `macro_rules! module`
     }
 }
-event_based_pseudo_classes!(module);
+state_pseudo_classes!(module);
