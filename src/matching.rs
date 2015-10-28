@@ -2,12 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+macro_rules! module {
+    ($(
+        $(#[$Flag_attr: meta])*
+        state $css: expr => $variant: ident / $method: ident /
+        $flag: ident = $value: expr,
+    )+) => {
+
 use std::ascii::AsciiExt;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
 use bloom::BloomFilter;
-use event_state::*;
 use smallvec::VecLike;
 use quickersort::sort_by;
 use string_cache::Atom;
@@ -658,41 +664,12 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
         SimpleSelector::Visited => {
             element.is_visited_link()
         }
-        // https://html.spec.whatwg.org/multipage/scripting.html#selector-hover
-        SimpleSelector::Hover => {
-            *shareable = false;
-            element.get_state().contains(IN_HOVER_STATE)
-        },
-        // https://html.spec.whatwg.org/multipage/scripting.html#selector-focus
-        SimpleSelector::Focus => {
-            *shareable = false;
-            element.get_state().contains(IN_FOCUS_STATE)
-        },
-        // https://html.spec.whatwg.org/multipage/scripting.html#selector-active
-        SimpleSelector::Active => {
-            *shareable = false;
-            element.get_state().contains(IN_ACTIVE_STATE)
-        },
-        // http://www.whatwg.org/html/#selector-disabled
-        SimpleSelector::Disabled => {
-            *shareable = false;
-            element.get_state().contains(IN_DISABLED_STATE)
-        },
-        // http://www.whatwg.org/html/#selector-enabled
-        SimpleSelector::Enabled => {
-            *shareable = false;
-            element.get_state().contains(IN_ENABLED_STATE)
-        },
-        // https://html.spec.whatwg.org/multipage/scripting.html#selector-checked
-        SimpleSelector::Checked => {
-            *shareable = false;
-            element.get_state().contains(IN_CHECKED_STATE)
-        }
-        // https://html.spec.whatwg.org/multipage/scripting.html#selector-indeterminate
-        SimpleSelector::Indeterminate => {
-            *shareable = false;
-            element.get_state().contains(IN_INDETERMINATE_STATE)
-        }
+        $(
+            SimpleSelector::$variant => {
+                *shareable = false;
+                element.$method()
+            },
+        )+
         SimpleSelector::FirstChild => {
             *shareable = false;
             matches_first_child(element)
@@ -909,3 +886,8 @@ mod tests {
         assert!(selector_map.class_hash.get(&Atom::from_slice("foo")).is_none());
     }
 }
+
+// End of `macro_rules! module`
+    }
+}
+state_pseudo_classes!(module);

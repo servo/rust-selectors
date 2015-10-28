@@ -2,6 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+macro_rules! module {
+    ($(
+        $(#[$Flag_attr: meta])*
+        state $css: expr => $variant: ident / $method: ident /
+        $flag: ident = $value: expr,
+    )+) => {
+
 use std::ascii::AsciiExt;
 use std::borrow::Cow;
 use std::cmp;
@@ -82,13 +89,9 @@ pub enum SimpleSelector {
     AnyLink,
     Link,
     Visited,
-    Hover,
-    Focus,
-    Active,
-    Disabled,
-    Enabled,
-    Checked,
-    Indeterminate,
+
+    $( $variant, )+
+
     FirstChild, LastChild, OnlyChild,
     Root,
     Empty,
@@ -177,14 +180,13 @@ fn compute_specificity(mut selector: &CompoundSelector,
                 &SimpleSelector::AttrSubstringMatch(..) |
                 &SimpleSelector::AttrSuffixMatch(..) |
                 &SimpleSelector::AnyLink | &SimpleSelector::Link |
-                &SimpleSelector::Visited | &SimpleSelector::Hover |
-                &SimpleSelector::Focus | &SimpleSelector::Active |
-                &SimpleSelector::Disabled | &SimpleSelector::Enabled |
+                &SimpleSelector::Visited |
+
+                $( &SimpleSelector::$variant | )+
+
                 &SimpleSelector::FirstChild | &SimpleSelector::LastChild |
                 &SimpleSelector::OnlyChild | &SimpleSelector::Root |
                 &SimpleSelector::Empty |
-                &SimpleSelector::Checked |
-                &SimpleSelector::Indeterminate |
                 &SimpleSelector::NthChild(..) |
                 &SimpleSelector::NthLastChild(..) |
                 &SimpleSelector::NthOfType(..) |
@@ -618,13 +620,9 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         "any-link" => Ok(SimpleSelector::AnyLink),
         "link" => Ok(SimpleSelector::Link),
         "visited" => Ok(SimpleSelector::Visited),
-        "hover" => Ok(SimpleSelector::Hover),
-        "focus" => Ok(SimpleSelector::Focus),
-        "active" => Ok(SimpleSelector::Active),
-        "disabled" => Ok(SimpleSelector::Disabled),
-        "enabled" => Ok(SimpleSelector::Enabled),
-        "checked" => Ok(SimpleSelector::Checked),
-        "indeterminate" => Ok(SimpleSelector::Indeterminate),
+
+        $( $css => Ok(SimpleSelector::$variant), )+
+
         "first-child" => Ok(SimpleSelector::FirstChild),
         "last-child"  => Ok(SimpleSelector::LastChild),
         "only-child"  => Ok(SimpleSelector::OnlyChild),
@@ -830,3 +828,8 @@ mod tests {
         }]))
     }
 }
+
+// End of `macro_rules! module`
+    }
+}
+state_pseudo_classes!(module);

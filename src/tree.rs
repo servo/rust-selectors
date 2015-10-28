@@ -5,10 +5,15 @@
 //! Traits that nodes must implement. Breaks the otherwise-cyclic dependency between layout and
 //! style.
 
-use event_state::EventState;
+macro_rules! module {
+    ($(
+        $(#[$Flag_attr: meta])*
+        state $css: expr => $variant: ident / $method: ident /
+        $flag: ident = $value: expr,
+    )+) => {
+
 use parser::AttrSelector;
 use string_cache::{Atom, Namespace};
-
 
 pub trait Element: Sized {
     fn parent_element(&self) -> Option<Self>;
@@ -28,7 +33,9 @@ pub trait Element: Sized {
     fn is_html_element_in_html_document(&self) -> bool;
     fn get_local_name<'a>(&'a self) -> &'a Atom;
     fn get_namespace<'a>(&'a self) -> &'a Namespace;
-    fn get_state(&self) -> EventState;
+
+    $( fn $method(&self) -> bool; )+
+
     fn get_id(&self) -> Option<Atom>;
     fn has_class(&self, name: &Atom) -> bool;
     fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
@@ -73,3 +80,8 @@ pub trait Element: Sized {
     // JS GC story... --pcwalton
     fn each_class<F>(&self, callback: F) where F: FnMut(&Atom);
 }
+
+// End of `macro_rules! module`
+    }
+}
+state_pseudo_classes!(module);
