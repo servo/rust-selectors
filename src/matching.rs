@@ -309,7 +309,7 @@ pub fn matches<E>(selector_list: &Vec<Selector>,
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
 /// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
-fn matches_compound_selector<E>(selector: &CompoundSelector,
+pub fn matches_compound_selector<E>(selector: &CompoundSelector,
                                 element: &E,
                                 parent_bf: Option<&BloomFilter>,
                                 shareable: &mut bool)
