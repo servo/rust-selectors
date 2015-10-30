@@ -37,7 +37,7 @@ macro_rules! states_bitflag {
     )+) => {
         bitflags! {
             #[doc = "Event-based element states."]
-            flags ElementState: u16 {
+            flags ElementState: u8 {
                 $($(#[$Flag_attr])* const $flag = $value,)+
             }
         }
