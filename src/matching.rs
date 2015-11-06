@@ -732,7 +732,12 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector,
         SimpleSelector::Negation(ref negated) => {
             *shareable = false;
             !negated.iter().all(|s| matches_simple_selector(s, element, shareable))
-        },
+        }
+
+        SimpleSelector::Lang(ref lang) => {
+            *shareable = false;
+            element.matches_lang(lang)
+        }
     }
 }
 

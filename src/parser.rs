@@ -103,6 +103,7 @@ pub enum SimpleSelector {
     LastOfType,
     OnlyOfType,
     ServoNonzeroBorder,
+    Lang(String),
     // ...
 }
 
@@ -193,6 +194,7 @@ fn compute_specificity(mut selector: &CompoundSelector,
                 &SimpleSelector::NthLastOfType(..) |
                 &SimpleSelector::FirstOfType | &SimpleSelector::LastOfType |
                 &SimpleSelector::OnlyOfType |
+                &SimpleSelector::Lang(..) |
                 &SimpleSelector::ServoNonzeroBorder =>
                     specificity.class_like_selectors += 1,
                 &SimpleSelector::Namespace(..) => (),
@@ -522,6 +524,7 @@ fn parse_functional_pseudo_class(context: &ParserContext,
         "nth-of-type" => parse_nth_pseudo_class(input, SimpleSelector::NthOfType),
         "nth-last-child" => parse_nth_pseudo_class(input, SimpleSelector::NthLastChild),
         "nth-last-of-type" => parse_nth_pseudo_class(input, SimpleSelector::NthLastOfType),
+        "lang" => parse_lang_pseudo_class(input),
         "not" => {
             if inside_negation {
                 Err(())
@@ -640,6 +643,11 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         }
         _ => Err(())
     }
+}
+
+fn parse_lang_pseudo_class(input: &mut Parser) -> Result<SimpleSelector, ()> {
+    let string_result = Ok((try!(input.expect_ident())).into_owned());
+    Ok(SimpleSelector::Lang(try!(string_result)))
 }
 
 fn parse_pseudo_element(name: &str) -> Result<PseudoElement, ()> {
