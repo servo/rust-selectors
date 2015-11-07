@@ -74,6 +74,9 @@ pub trait Element: Sized {
     /// Defaults to `is_link()`: when browsing history is not recorded, all links are "unvisited".
     fn is_unvisited_link(&self) -> bool { self.is_link() }
 
+    /// Returns whether this elements matches ':lang(lang)'
+    fn matches_lang(&self, lang: &Atom) -> bool;
+
     // Ordinarily I wouldn't use callbacks like this, but the alternative is
     // really messy, since there is a `JSRef` and a `RefCell` involved. Maybe
     // in the future when we have associated types and/or a more convenient
