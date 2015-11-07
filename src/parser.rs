@@ -646,7 +646,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
 }
 
 fn parse_lang_pseudo_class(input: &mut Parser) -> Result<SimpleSelector, ()> {
-    let string = try!(input.expect_ident()).into_owned();
+    let string = try!(input.expect_ident());
     let atom = Atom::from_slice(&string);
     Ok(SimpleSelector::Lang(atom))
 }
