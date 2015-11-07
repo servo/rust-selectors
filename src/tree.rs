@@ -75,7 +75,7 @@ pub trait Element: Sized {
     fn is_unvisited_link(&self) -> bool { self.is_link() }
 
     /// Returns whether this elements matches ':lang(lang)'
-    fn matches_lang(&self, lang: &str) -> bool;
+    fn matches_lang(&self, lang: &Atom) -> bool;
 
     // Ordinarily I wouldn't use callbacks like this, but the alternative is
     // really messy, since there is a `JSRef` and a `RefCell` involved. Maybe

@@ -103,7 +103,7 @@ pub enum SimpleSelector {
     LastOfType,
     OnlyOfType,
     ServoNonzeroBorder,
-    Lang(String),
+    Lang(Atom),
     // ...
 }
 
@@ -646,8 +646,9 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
 }
 
 fn parse_lang_pseudo_class(input: &mut Parser) -> Result<SimpleSelector, ()> {
-    let string_result = Ok((try!(input.expect_ident())).into_owned());
-    Ok(SimpleSelector::Lang(try!(string_result)))
+    let string = try!(input.expect_ident()).into_owned();
+    let atom = Atom::from_slice(&string);
+    Ok(SimpleSelector::Lang(atom))
 }
 
 fn parse_pseudo_element(name: &str) -> Result<PseudoElement, ()> {
