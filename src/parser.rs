@@ -297,8 +297,8 @@ fn parse_type_selector(context: &ParserContext, input: &mut Parser)
             match local_name {
                 Some(name) => {
                     simple_selectors.push(SimpleSelector::LocalName(LocalName {
-                        name: Atom::from_slice(&name),
-                        lower_name: Atom::from_slice(&name.to_ascii_lowercase()),
+                        name: Atom::from(&*name),
+                        lower_name: Atom::from(&*name.to_ascii_lowercase()),
                     }))
                 }
                 None => (),
@@ -356,7 +356,7 @@ fn parse_qualified_name<'i, 't>
                 _ => {
                     input.reset(position);
                     if in_attr_selector {
-                        Ok(Some((NamespaceConstraint::Specific(ns!("")), Some(value))))
+                        Ok(Some((NamespaceConstraint::Specific(ns!()), Some(value))))
                     } else {
                         default_namespace(Some(value))
                     }
@@ -377,7 +377,7 @@ fn parse_qualified_name<'i, 't>
                 },
             }
         },
-        Ok(Token::Delim('|')) => explicit_namespace(input, NamespaceConstraint::Specific(ns!(""))),
+        Ok(Token::Delim('|')) => explicit_namespace(input, NamespaceConstraint::Specific(ns!())),
         _ => {
             input.reset(position);
             Ok(None)
@@ -393,8 +393,8 @@ fn parse_attribute_selector(context: &ParserContext, input: &mut Parser)
         Some((_, None)) => unreachable!(),
         Some((namespace, Some(local_name))) => AttrSelector {
             namespace: namespace,
-            lower_name: Atom::from_slice(&local_name.to_ascii_lowercase()),
-            name: Atom::from_slice(&local_name),
+            lower_name: Atom::from(&*local_name.to_ascii_lowercase()),
+            name: Atom::from(&*local_name),
         },
     };
 
@@ -553,13 +553,13 @@ fn parse_one_simple_selector(context: &ParserContext,
     let start_position = input.position();
     match input.next_including_whitespace() {
         Ok(Token::IDHash(id)) => {
-            let id = SimpleSelector::ID(Atom::from_slice(&id));
+            let id = SimpleSelector::ID(Atom::from(&*id));
             Ok(Some(SimpleSelectorParseResult::SimpleSelector(id)))
         }
         Ok(Token::Delim('.')) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(class)) => {
-                    let class = SimpleSelector::Class(Atom::from_slice(&class));
+                    let class = SimpleSelector::Class(Atom::from(&*class));
                     Ok(Some(SimpleSelectorParseResult::SimpleSelector(class)))
                 }
                 _ => Err(()),
@@ -682,8 +682,8 @@ mod tests {
         assert_eq!(parse("EeÉ"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
-                    name: Atom::from_slice("EeÉ"),
-                    lower_name: Atom::from_slice("eeÉ") })),
+                    name: Atom::from("EeÉ"),
+                    lower_name: Atom::from("eeÉ") })),
                 next: None,
             }),
             pseudo_element: None,
@@ -691,7 +691,7 @@ mod tests {
         })));
         assert_eq!(parse(".foo"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::Class(Atom::from_slice("foo"))),
+                simple_selectors: vec!(SimpleSelector::Class(Atom::from("foo"))),
                 next: None,
             }),
             pseudo_element: None,
@@ -699,7 +699,7 @@ mod tests {
         })));
         assert_eq!(parse("#bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::ID(Atom::from_slice("bar"))),
+                simple_selectors: vec!(SimpleSelector::ID(Atom::from("bar"))),
                 next: None,
             }),
             pseudo_element: None,
@@ -708,10 +708,10 @@ mod tests {
         assert_eq!(parse("e.foo#bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
-                                            name: Atom::from_slice("e"),
-                                            lower_name: Atom::from_slice("e") }),
-                                       SimpleSelector::Class(Atom::from_slice("foo")),
-                                       SimpleSelector::ID(Atom::from_slice("bar"))),
+                                            name: Atom::from("e"),
+                                            lower_name: Atom::from("e") }),
+                                       SimpleSelector::Class(Atom::from("foo")),
+                                       SimpleSelector::ID(Atom::from("bar"))),
                 next: None,
             }),
             pseudo_element: None,
@@ -719,12 +719,12 @@ mod tests {
         })));
         assert_eq!(parse("e.foo #bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::ID(Atom::from_slice("bar"))),
+                simple_selectors: vec!(SimpleSelector::ID(Atom::from("bar"))),
                 next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
-                                                name: Atom::from_slice("e"),
-                                                lower_name: Atom::from_slice("e") }),
-                                           SimpleSelector::Class(Atom::from_slice("foo"))),
+                                                name: Atom::from("e"),
+                                                lower_name: Atom::from("e") }),
+                                           SimpleSelector::Class(Atom::from("foo"))),
                     next: None,
                 }), Combinator::Descendant)),
             }),
@@ -737,9 +737,9 @@ mod tests {
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::AttrExists(AttrSelector {
-                    name: Atom::from_slice("Foo"),
-                    lower_name: Atom::from_slice("foo"),
-                    namespace: NamespaceConstraint::Specific(ns!("")),
+                    name: Atom::from("Foo"),
+                    lower_name: Atom::from("foo"),
+                    namespace: NamespaceConstraint::Specific(ns!()),
                 })),
                 next: None,
             }),
@@ -748,13 +748,13 @@ mod tests {
         })));
         // Default namespace does not apply to attribute selectors
         // https://github.com/mozilla/servo/pull/1652
-        context.default_namespace = Some(ns!(MathML));
+        context.default_namespace = Some(ns!(mathml));
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::AttrExists(AttrSelector {
-                    name: Atom::from_slice("Foo"),
-                    lower_name: Atom::from_slice("foo"),
-                    namespace: NamespaceConstraint::Specific(ns!("")),
+                    name: Atom::from("Foo"),
+                    lower_name: Atom::from("foo"),
+                    namespace: NamespaceConstraint::Specific(ns!()),
                 })),
                 next: None,
             }),
@@ -765,10 +765,10 @@ mod tests {
         assert_eq!(parse_ns("e", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(
-                    SimpleSelector::Namespace(ns!(MathML)),
+                    SimpleSelector::Namespace(ns!(mathml)),
                     SimpleSelector::LocalName(LocalName {
-                        name: Atom::from_slice("e"),
-                        lower_name: Atom::from_slice("e") }),
+                        name: Atom::from("e"),
+                        lower_name: Atom::from("e") }),
                 ),
                 next: None,
             }),
@@ -779,9 +779,9 @@ mod tests {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec![
                     SimpleSelector::AttrDashMatch(AttrSelector {
-                        name: Atom::from_slice("attr"),
-                        lower_name: Atom::from_slice("attr"),
-                        namespace: NamespaceConstraint::Specific(ns!("")),
+                        name: Atom::from("attr"),
+                        lower_name: Atom::from("attr"),
+                        namespace: NamespaceConstraint::Specific(ns!()),
                     }, "foo".to_owned(), "foo-".to_owned())
                 ],
                 next: None,
@@ -814,11 +814,11 @@ mod tests {
         assert_eq!(parse("#d1 > .ok"), Ok(vec![Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec![
-                    SimpleSelector::Class(Atom::from_slice("ok")),
+                    SimpleSelector::Class(Atom::from("ok")),
                 ],
                 next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec![
-                        SimpleSelector::ID(Atom::from_slice("d1")),
+                        SimpleSelector::ID(Atom::from("d1")),
                     ],
                     next: None,
                 }), Combinator::Child)),
