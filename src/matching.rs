@@ -856,7 +856,7 @@ mod tests {
     #[test]
     fn test_get_class_name(){
         let rules_list = get_mock_rules(&[".intro.foo", "#top"]);
-        assert_eq!(SelectorMap::get_class_name(&rules_list[0][0]), Some(Atom::from_slice("intro")));
+        assert_eq!(SelectorMap::get_class_name(&rules_list[0][0]), Some(Atom::from("intro")));
         assert_eq!(SelectorMap::get_class_name(&rules_list[1][0]), None);
     }
 
@@ -866,8 +866,8 @@ mod tests {
         let check = |i: usize, names: Option<(&str, &str)>| {
             assert!(SelectorMap::get_local_name(&rules_list[i][0])
                     == names.map(|(name, lower_name)| LocalName {
-                            name: Atom::from_slice(name),
-                            lower_name: Atom::from_slice(lower_name) }))
+                            name: Atom::from(name),
+                            lower_name: Atom::from(lower_name) }))
         };
         check(0, Some(("img", "img")));
         check(1, None);
@@ -882,8 +882,8 @@ mod tests {
         selector_map.insert(rules_list[1][0].clone());
         assert_eq!(1, selector_map.id_hash.get(&atom!("top")).unwrap()[0].declarations.source_order);
         selector_map.insert(rules_list[0][0].clone());
-        assert_eq!(0, selector_map.class_hash.get(&Atom::from_slice("intro")).unwrap()[0].declarations.source_order);
-        assert!(selector_map.class_hash.get(&Atom::from_slice("foo")).is_none());
+        assert_eq!(0, selector_map.class_hash.get(&Atom::from("intro")).unwrap()[0].declarations.source_order);
+        assert!(selector_map.class_hash.get(&Atom::from("foo")).is_none());
     }
 }
 
