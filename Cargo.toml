@@ -1,8 +1,8 @@
 [package]
 
 name = "selectors"
-version = "0.2.1"
-authors = ["Simon Sapin <simon.sapin@exyr.org>"]
+version = "0.2.2"
+authors = ["Simon Sapin <simon.sapin@exyr.org>", "Alan Jeffrey <ajeffrey@mozilla.com>"]
 documentation = "http://doc.servo.org/selectors/"
 
 description = "CSS Selectors matching for Rust"
@@ -12,7 +12,7 @@ keywords = ["css", "selectors"]
 license = "MPL-2.0"
 
 [features]
-unstable = ["string_cache_plugin", "string_cache/unstable"]
+unstable = ["string_cache/unstable"]
 heap_size = ["string_cache/heap_size", "heapsize", "heapsize_plugin"]
 
 [dependencies]
@@ -21,8 +21,7 @@ matches = "0.1"
 cssparser = "0.4"
 smallvec = "0.1"
 fnv = "1.0"
-string_cache = "0.1.13"
-string_cache_plugin = { version = "0.1.7", optional = true }
+string_cache = "0.2.0"
 quickersort = "1.0.0"
 
 [dependencies.heapsize]
