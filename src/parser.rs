@@ -528,7 +528,7 @@ fn parse_functional_pseudo_class(context: &ParserContext,
             } else {
                 parse_negation(context, input)
             }
-        }
+        },
         _ => Err(())
     }
 }
@@ -582,7 +582,7 @@ fn parse_one_simple_selector(context: &ParserContext,
                                 "before" => PseudoElement::Before,
                                 "after" => PseudoElement::After,
                                 "first-line" => return Err(()),
-                                "first-letter" => return Err(())
+                                "first-letter" => return Err(()),
                                 _ => return Err(())
                             };
                             Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
@@ -637,7 +637,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
             } else {
                 Err(())
             }
-        }
+        },
         _ => Err(())
     }
 }
@@ -645,7 +645,7 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
 fn parse_pseudo_element(name: &str) -> Result<PseudoElement, ()> {
     match_ignore_ascii_case! { name,
         "before" => Ok(PseudoElement::Before),
-        "after" => Ok(PseudoElement::After)
+        "after" => Ok(PseudoElement::After),
         _ => Err(())
     }
 }
