@@ -48,6 +48,8 @@ pub struct Selector {
 pub enum PseudoElement {
     Before,
     After,
+    ServoDetailsSummary,
+    ServoDetailsContent,
     // ...
 }
 
@@ -646,6 +648,8 @@ fn parse_pseudo_element(name: &str) -> Result<PseudoElement, ()> {
     match_ignore_ascii_case! { name,
         "before" => Ok(PseudoElement::Before),
         "after" => Ok(PseudoElement::After),
+        "-servo-details-summary" => Ok(PseudoElement::ServoDetailsSummary),
+        "-servo-details-content" => Ok(PseudoElement::ServoDetailsContent),
         _ => Err(())
     }
 }
@@ -826,6 +830,31 @@ mod tests {
             pseudo_element: None,
             specificity: (1 << 20) + (1 << 10) + (0 << 0),
         }]))
+    }
+
+    #[test]
+    fn test_details_pseudo_element() {
+        assert_eq!(parse("details::-servo-details-content"), Ok(vec![Selector {
+            compound_selectors: Arc::new(CompoundSelector {
+                simple_selectors: vec!(
+                    SimpleSelector::LocalName(LocalName {
+                        name: Atom::from("details"),
+                        lower_name: Atom::from("details") }),
+                ),
+                next: None,
+            }),
+            pseudo_element: Some(PseudoElement::ServoDetailsContent),
+            specificity: specificity(0, 0, 2),
+        }]));
+        assert_eq!(parse("::-servo-details-summary"), Ok(vec![Selector {
+            compound_selectors: Arc::new(CompoundSelector {
+                simple_selectors: vec!(),
+                next: None,
+            }),
+            pseudo_element: Some(PseudoElement::ServoDetailsSummary),
+            specificity: specificity(0, 0, 1),
+        }]));
+        assert_eq!(parse("details:-servo-details-content"), Err(()));
     }
 }
 
