@@ -18,7 +18,6 @@ extern crate smallvec;
 extern crate fnv;
 
 pub mod bloom;
-#[macro_use] pub mod states;
 pub mod matching;
 pub mod parser;
 mod tree;
