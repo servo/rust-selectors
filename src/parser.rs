@@ -2,22 +2,44 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-macro_rules! module {
-    ($(
-        $(#[$Flag_attr: meta])*
-        state $css: expr => $variant: ident / $method: ident /
-        $flag: ident = $value: expr,
-    )+) => {
-
 use std::ascii::AsciiExt;
 use std::borrow::Cow;
 use std::cmp;
+use std::fmt::Debug;
 use std::sync::Arc;
+#[cfg(feature = "heap_size")]
+use heapsize::HeapSizeOf;
 
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
 
 use hash_map;
+
+/// This trait allows to define the parser implementation in regards
+/// of pseudo-classes/elements
+pub trait SelectorImpl {
+    /// non tree-structural pseudo-classes
+    /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
+    #[cfg(feature = "heap_size")]
+    type NonTSPseudoClass: Sized + PartialEq + Clone + Debug + HeapSizeOf;
+    #[cfg(not(feature = "heap_size"))]
+    type NonTSPseudoClass: Sized + PartialEq + Clone + Debug;
+
+    /// This function can return an "Err" pseudo-element in order to support CSS2.1
+    /// pseudo-elements.
+    fn parse_non_ts_pseudo_class(_context: &ParserContext,
+                                 _name: &str)
+        -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+
+    /// pseudo-elements
+    #[cfg(feature = "heap_size")]
+    type PseudoElement: Sized + PartialEq + Clone + Debug + HeapSizeOf;
+    #[cfg(not(feature = "heap_size"))]
+    type PseudoElement: Sized + PartialEq + Clone + Debug;
+    fn parse_pseudo_element(_context: &ParserContext,
+                            _name: &str)
+        -> Result<Self::PseudoElement, ()> { Err(()) }
+}
 
 pub struct ParserContext {
     pub in_user_agent_stylesheet: bool,
@@ -37,25 +59,17 @@ impl ParserContext {
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone, Debug)]
-pub struct Selector {
-    pub compound_selectors: Arc<CompoundSelector>,
-    pub pseudo_element: Option<PseudoElement>,
+pub struct Selector<Impl: SelectorImpl> {
+    pub compound_selectors: Arc<CompoundSelector<Impl>>,
+    pub pseudo_element: Option<Impl::PseudoElement>,
     pub specificity: u32,
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-#[derive(Eq, PartialEq, Clone, Hash, Copy, Debug)]
-pub enum PseudoElement {
-    Before,
-    After,
-    // ...
-}
-
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone, Debug)]
-pub struct CompoundSelector {
-    pub simple_selectors: Vec<SimpleSelector>,
-    pub next: Option<(Arc<CompoundSelector>, Combinator)>,  // c.next is left of c
+pub struct CompoundSelector<Impl: SelectorImpl> {
+    pub simple_selectors: Vec<SimpleSelector<Impl>>,
+    pub next: Option<(Arc<CompoundSelector<Impl>>, Combinator)>,  // c.next is left of c
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
@@ -69,7 +83,7 @@ pub enum Combinator {
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
-pub enum SimpleSelector {
+pub enum SimpleSelector<Impl: SelectorImpl> {
     ID(Atom),
     Class(Atom),
     LocalName(LocalName),
@@ -85,13 +99,7 @@ pub enum SimpleSelector {
     AttrSuffixMatch(AttrSelector, String),  // [foo$=bar]
 
     // Pseudo-classes
-    Negation(Vec<SimpleSelector>),
-    AnyLink,
-    Link,
-    Visited,
-
-    $( $variant, )+
-
+    Negation(Vec<SimpleSelector<Impl>>),
     FirstChild, LastChild, OnlyChild,
     Root,
     Empty,
@@ -102,7 +110,7 @@ pub enum SimpleSelector {
     FirstOfType,
     LastOfType,
     OnlyOfType,
-    ServoNonzeroBorder,
+    NonTSPseudoClass(Impl::NonTSPseudoClass),
     // ...
 }
 
@@ -138,8 +146,8 @@ pub enum NamespaceConstraint {
 }
 
 
-fn compute_specificity(mut selector: &CompoundSelector,
-                       pseudo_element: &Option<PseudoElement>) -> u32 {
+fn compute_specificity<Impl: SelectorImpl>(mut selector: &CompoundSelector<Impl>,
+                                           pseudo_element: &Option<Impl::PseudoElement>) -> u32 {
     struct Specificity {
         id_selectors: u32,
         class_like_selectors: u32,
@@ -163,40 +171,37 @@ fn compute_specificity(mut selector: &CompoundSelector,
         }
     }
 
-    fn simple_selectors_specificity(simple_selectors: &[SimpleSelector],
-                                    specificity: &mut Specificity) {
+    fn simple_selectors_specificity<Impl: SelectorImpl>(simple_selectors: &[SimpleSelector<Impl>],
+                                                        specificity: &mut Specificity) {
         for simple_selector in simple_selectors.iter() {
-            match simple_selector {
-                &SimpleSelector::LocalName(..) =>
+            match *simple_selector {
+                SimpleSelector::LocalName(..) =>
                     specificity.element_selectors += 1,
-                &SimpleSelector::ID(..) =>
+                SimpleSelector::ID(..) =>
                     specificity.id_selectors += 1,
-                &SimpleSelector::Class(..) |
-                &SimpleSelector::AttrExists(..) |
-                &SimpleSelector::AttrEqual(..) |
-                &SimpleSelector::AttrIncludes(..) |
-                &SimpleSelector::AttrDashMatch(..) |
-                &SimpleSelector::AttrPrefixMatch(..) |
-                &SimpleSelector::AttrSubstringMatch(..) |
-                &SimpleSelector::AttrSuffixMatch(..) |
-                &SimpleSelector::AnyLink | &SimpleSelector::Link |
-                &SimpleSelector::Visited |
+                SimpleSelector::Class(..) |
+                SimpleSelector::AttrExists(..) |
+                SimpleSelector::AttrEqual(..) |
+                SimpleSelector::AttrIncludes(..) |
+                SimpleSelector::AttrDashMatch(..) |
+                SimpleSelector::AttrPrefixMatch(..) |
+                SimpleSelector::AttrSubstringMatch(..) |
+                SimpleSelector::AttrSuffixMatch(..) |
 
-                $( &SimpleSelector::$variant | )+
-
-                &SimpleSelector::FirstChild | &SimpleSelector::LastChild |
-                &SimpleSelector::OnlyChild | &SimpleSelector::Root |
-                &SimpleSelector::Empty |
-                &SimpleSelector::NthChild(..) |
-                &SimpleSelector::NthLastChild(..) |
-                &SimpleSelector::NthOfType(..) |
-                &SimpleSelector::NthLastOfType(..) |
-                &SimpleSelector::FirstOfType | &SimpleSelector::LastOfType |
-                &SimpleSelector::OnlyOfType |
-                &SimpleSelector::ServoNonzeroBorder =>
+                SimpleSelector::FirstChild | SimpleSelector::LastChild |
+                SimpleSelector::OnlyChild | SimpleSelector::Root |
+                SimpleSelector::Empty |
+                SimpleSelector::NthChild(..) |
+                SimpleSelector::NthLastChild(..) |
+                SimpleSelector::NthOfType(..) |
+                SimpleSelector::NthLastOfType(..) |
+                SimpleSelector::FirstOfType | SimpleSelector::LastOfType |
+                SimpleSelector::OnlyOfType |
+                SimpleSelector::NonTSPseudoClass(..) =>
                     specificity.class_like_selectors += 1,
-                &SimpleSelector::Namespace(..) => (),
-                &SimpleSelector::Negation(ref negated) =>
+
+                SimpleSelector::Namespace(..) => (),
+                SimpleSelector::Negation(ref negated) =>
                     simple_selectors_specificity(negated, specificity),
             }
         }
@@ -210,7 +215,7 @@ fn compute_specificity(mut selector: &CompoundSelector,
 
 
 
-pub fn parse_author_origin_selector_list_from_str(input: &str) -> Result<Vec<Selector>, ()> {
+pub fn parse_author_origin_selector_list_from_str<Impl: SelectorImpl>(input: &str) -> Result<Vec<Selector<Impl>>, ()> {
     let context = ParserContext::new();
     parse_selector_list(&context, &mut Parser::new(input))
 }
@@ -219,8 +224,8 @@ pub fn parse_author_origin_selector_list_from_str(input: &str) -> Result<Vec<Sel
 /// aka Selector Group in http://www.w3.org/TR/css3-selectors/#grouping
 ///
 /// Return the Selectors or None if there is an invalid selector.
-pub fn parse_selector_list(context: &ParserContext, input: &mut Parser)
-                           -> Result<Vec<Selector>,()> {
+pub fn parse_selector_list<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parser)
+                           -> Result<Vec<Selector<Impl>>,()> {
     input.parse_comma_separated(|input| parse_selector(context, input))
 }
 
@@ -229,7 +234,7 @@ pub fn parse_selector_list(context: &ParserContext, input: &mut Parser)
 /// selector : simple_selector_sequence [ combinator simple_selector_sequence ]* ;
 ///
 /// `Err` means invalid selector.
-fn parse_selector(context: &ParserContext, input: &mut Parser) -> Result<Selector,()> {
+fn parse_selector<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parser) -> Result<Selector<Impl>, ()> {
     let (first, mut pseudo_element) = try!(parse_simple_selectors(context, input));
     let mut compound = CompoundSelector{ simple_selectors: first, next: None };
 
@@ -282,8 +287,8 @@ fn parse_selector(context: &ParserContext, input: &mut Parser) -> Result<Selecto
 /// * `Err(())`: Invalid selector, abort
 /// * `Ok(None)`: Not a type selector, could be something else. `input` was not consumed.
 /// * `Ok(Some(vec))`: Length 0 (`*|*`), 1 (`*|E` or `ns|*`) or 2 (`|E` or `ns|E`)
-fn parse_type_selector(context: &ParserContext, input: &mut Parser)
-                       -> Result<Option<Vec<SimpleSelector>>, ()> {
+fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parser)
+                       -> Result<Option<Vec<SimpleSelector<Impl>>>, ()> {
     match try!(parse_qualified_name(context, input, /* in_attr_selector = */ false)) {
         None => Ok(None),
         Some((namespace, local_name)) => {
@@ -310,9 +315,9 @@ fn parse_type_selector(context: &ParserContext, input: &mut Parser)
 
 
 #[derive(Debug)]
-enum SimpleSelectorParseResult {
-    SimpleSelector(SimpleSelector),
-    PseudoElement(PseudoElement),
+enum SimpleSelectorParseResult<Impl: SelectorImpl> {
+    SimpleSelector(SimpleSelector<Impl>),
+    PseudoElement(Impl::PseudoElement),
 }
 
 
@@ -386,8 +391,8 @@ fn parse_qualified_name<'i, 't>
 }
 
 
-fn parse_attribute_selector(context: &ParserContext, input: &mut Parser)
-                            -> Result<SimpleSelector, ()> {
+fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parser)
+                            -> Result<SimpleSelector<Impl>, ()> {
     let attr = match try!(parse_qualified_name(context, input, /* in_attr_selector = */ true)) {
         None => return Err(()),
         Some((_, None)) => unreachable!(),
@@ -450,7 +455,9 @@ fn parse_attribute_flags(input: &mut Parser) -> Result<CaseSensitivity, ()> {
 
 
 /// Level 3: Parse **one** simple_selector
-fn parse_negation(context: &ParserContext, input: &mut Parser) -> Result<SimpleSelector,()> {
+fn parse_negation<Impl: SelectorImpl>(context: &ParserContext,
+                                      input: &mut Parser)
+                                      -> Result<SimpleSelector<Impl>, ()> {
     match try!(parse_type_selector(context, input)) {
         Some(type_selector) => Ok(SimpleSelector::Negation(type_selector)),
         None => {
@@ -471,8 +478,9 @@ fn parse_negation(context: &ParserContext, input: &mut Parser) -> Result<SimpleS
 /// | [ HASH | class | attrib | pseudo | negation ]+
 ///
 /// `Err(())` means invalid selector
-fn parse_simple_selectors(context: &ParserContext, input: &mut Parser)
-                          -> Result<(Vec<SimpleSelector>, Option<PseudoElement>),()> {
+fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext,
+                                              input: &mut Parser)
+                                              -> Result<(Vec<SimpleSelector<Impl>>, Option<Impl::PseudoElement>), ()> {
     // Consume any leading whitespace.
     loop {
         let position = input.position();
@@ -512,11 +520,11 @@ fn parse_simple_selectors(context: &ParserContext, input: &mut Parser)
     }
 }
 
-fn parse_functional_pseudo_class(context: &ParserContext,
-                                 input: &mut Parser,
-                                 name: &str,
-                                 inside_negation: bool)
-                                 -> Result<SimpleSelector,()> {
+fn parse_functional_pseudo_class<Impl: SelectorImpl>(context: &ParserContext,
+                                                     input: &mut Parser,
+                                                     name: &str,
+                                                     inside_negation: bool)
+                                                     -> Result<SimpleSelector<Impl>, ()> {
     match_ignore_ascii_case! { name,
         "nth-child" => parse_nth_pseudo_class(input, SimpleSelector::NthChild),
         "nth-of-type" => parse_nth_pseudo_class(input, SimpleSelector::NthOfType),
@@ -534,8 +542,8 @@ fn parse_functional_pseudo_class(context: &ParserContext,
 }
 
 
-fn parse_nth_pseudo_class<F>(input: &mut Parser, selector: F) -> Result<SimpleSelector, ()>
-where F: FnOnce(i32, i32) -> SimpleSelector {
+fn parse_nth_pseudo_class<Impl: SelectorImpl, F>(input: &mut Parser, selector: F) -> Result<SimpleSelector<Impl>, ()>
+where F: FnOnce(i32, i32) -> SimpleSelector<Impl> {
     let (a, b) = try!(parse_nth(input));
     Ok(selector(a, b))
 }
@@ -546,10 +554,10 @@ where F: FnOnce(i32, i32) -> SimpleSelector {
 /// * `Err(())`: Invalid selector, abort
 /// * `Ok(None)`: Not a simple selector, could be something else. `input` was not consumed.
 /// * `Ok(Some(_))`: Parsed a simple selector or pseudo-element
-fn parse_one_simple_selector(context: &ParserContext,
+fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext,
                              input: &mut Parser,
                              inside_negation: bool)
-                             -> Result<Option<SimpleSelectorParseResult>,()> {
+                             -> Result<Option<SimpleSelectorParseResult<Impl>>,()> {
     let start_position = input.position();
     match input.next_including_whitespace() {
         Ok(Token::IDHash(id)) => {
@@ -574,20 +582,17 @@ fn parse_one_simple_selector(context: &ParserContext,
         Ok(Token::Colon) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(name)) => {
-                    match parse_simple_pseudo_class(context, &name) {
-                        Err(()) => {
-                            let pseudo_element = match_ignore_ascii_case! { name,
-                                // Supported CSS 2.1 pseudo-elements only.
-                                // ** Do not add to this list! **
-                                "before" => PseudoElement::Before,
-                                "after" => PseudoElement::After,
-                                "first-line" => return Err(()),
-                                "first-letter" => return Err(()),
-                                _ => return Err(())
-                            };
-                            Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
-                        },
-                        Ok(result) => Ok(Some(SimpleSelectorParseResult::SimpleSelector(result))),
+                    // Supported CSS 2.1 pseudo-elements only.
+                    // ** Do not add to this list! **
+                    if name.eq_ignore_ascii_case("before") ||
+                       name.eq_ignore_ascii_case("after") ||
+                       name.eq_ignore_ascii_case("first-line") ||
+                       name.eq_ignore_ascii_case("first-letter") {
+                        let pseudo_element = try!(Impl::parse_pseudo_element(context, &name));
+                        Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
+                    } else {
+                        let pseudo_class = try!(parse_simple_pseudo_class(context, &name));
+                        Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo_class)))
                     }
                 }
                 Ok(Token::Function(name)) => {
@@ -599,7 +604,7 @@ fn parse_one_simple_selector(context: &ParserContext,
                 Ok(Token::Colon) => {
                     match input.next() {
                         Ok(Token::Ident(name)) => {
-                            let pseudo = try!(parse_pseudo_element(&name));
+                            let pseudo = try!(Impl::parse_pseudo_element(context, &name));
                             Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo)))
                         }
                         _ => Err(())
@@ -615,14 +620,8 @@ fn parse_one_simple_selector(context: &ParserContext,
     }
 }
 
-fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<SimpleSelector,()> {
+fn parse_simple_pseudo_class<Impl: SelectorImpl>(context: &ParserContext, name: &str) -> Result<SimpleSelector<Impl>, ()> {
     match_ignore_ascii_case! { name,
-        "any-link" => Ok(SimpleSelector::AnyLink),
-        "link" => Ok(SimpleSelector::Link),
-        "visited" => Ok(SimpleSelector::Visited),
-
-        $( $css => Ok(SimpleSelector::$variant), )+
-
         "first-child" => Ok(SimpleSelector::FirstChild),
         "last-child"  => Ok(SimpleSelector::LastChild),
         "only-child"  => Ok(SimpleSelector::OnlyChild),
@@ -631,38 +630,62 @@ fn parse_simple_pseudo_class(context: &ParserContext, name: &str) -> Result<Simp
         "first-of-type" => Ok(SimpleSelector::FirstOfType),
         "last-of-type"  => Ok(SimpleSelector::LastOfType),
         "only-of-type"  => Ok(SimpleSelector::OnlyOfType),
-        "-servo-nonzero-border" => {
-            if context.in_user_agent_stylesheet {
-                Ok(SimpleSelector::ServoNonzeroBorder)
-            } else {
-                Err(())
-            }
-        },
-        _ => Err(())
+        _ => Impl::parse_non_ts_pseudo_class(context, name).map(|pc| SimpleSelector::NonTSPseudoClass(pc))
     }
 }
 
-fn parse_pseudo_element(name: &str) -> Result<PseudoElement, ()> {
-    match_ignore_ascii_case! { name,
-        "before" => Ok(PseudoElement::Before),
-        "after" => Ok(PseudoElement::After),
-        _ => Err(())
-    }
-}
-
-
+// NB: pub module in order to access the DummySelectorImpl
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::sync::Arc;
     use cssparser::Parser;
     use string_cache::Atom;
     use super::*;
 
-    fn parse(input: &str) -> Result<Vec<Selector>, ()> {
+    #[derive(PartialEq, Clone, Debug)]
+    pub enum PseudoClass {
+        ServoNonZeroBorder,
+    }
+
+    #[derive(PartialEq, Clone, Debug)]
+    pub enum PseudoElement {
+        Before,
+        After,
+    }
+
+    #[derive(PartialEq, Debug)]
+    pub struct DummySelectorImpl;
+
+    impl SelectorImpl for DummySelectorImpl {
+        type NonTSPseudoClass = PseudoClass;
+        fn parse_non_ts_pseudo_class(context: &ParserContext, name: &str) -> Result<PseudoClass, ()> {
+            match_ignore_ascii_case! { name,
+                "-servo-nonzero-border" => {
+                    if context.in_user_agent_stylesheet {
+                        Ok(PseudoClass::ServoNonZeroBorder)
+                    } else {
+                        Err(())
+                    }
+                },
+                _ => Err(())
+            }
+        }
+
+        type PseudoElement = PseudoElement;
+        fn parse_pseudo_element(_context: &ParserContext, name: &str) -> Result<PseudoElement, ()> {
+            match_ignore_ascii_case! { name,
+                "before" => Ok(PseudoElement::Before),
+                "after" => Ok(PseudoElement::After),
+                _ => Err(())
+            }
+        }
+    }
+
+    fn parse(input: &str) -> Result<Vec<Selector<DummySelectorImpl>>, ()> {
         parse_ns(input, &ParserContext::new())
     }
 
-    fn parse_ns(input: &str, context: &ParserContext) -> Result<Vec<Selector>, ()> {
+    fn parse_ns(input: &str, context: &ParserContext) -> Result<Vec<Selector<DummySelectorImpl>>, ()> {
         parse_selector_list(context, &mut Parser::new(input))
     }
 
@@ -672,7 +695,7 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        let list = parse_author_origin_selector_list_from_str(":empty");
+        let list = parse_author_origin_selector_list_from_str::<DummySelectorImpl>(":empty");
         assert!(list.is_ok());
     }
 
@@ -828,8 +851,3 @@ mod tests {
         }]))
     }
 }
-
-// End of `macro_rules! module`
-    }
-}
-state_pseudo_classes!(module);
