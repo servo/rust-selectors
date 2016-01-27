@@ -582,22 +582,17 @@ fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext,
         Ok(Token::Colon) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(name)) => {
-                    match parse_simple_pseudo_class(context, &name) {
-                        Err(()) => {
-                            // Supported CSS 2.1 pseudo-elements only.
-                            // ** Do not add to this list! **
-                            let pseudo_element = match_ignore_ascii_case! { name,
-                                // FIXME: This doesn't compile if we use "before" | "after"...
-                                "before" => try!(Impl::parse_pseudo_element(context, &name)),
-                                "after" => try!(Impl::parse_pseudo_element(context, &name)),
-                                "first-line" => try!(Impl::parse_pseudo_element(context, &name)),
-                                "first-letter" => try!(Impl::parse_pseudo_element(context, &name)),
-                                _ => return Err(())
-                            };
-
-                            return Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
-                        },
-                        Ok(result) => Ok(Some(SimpleSelectorParseResult::SimpleSelector(result))),
+                    // Supported CSS 2.1 pseudo-elements only.
+                    // ** Do not add to this list! **
+                    if name.eq_ignore_ascii_case("before") ||
+                       name.eq_ignore_ascii_case("after") ||
+                       name.eq_ignore_ascii_case("first-line") ||
+                       name.eq_ignore_ascii_case("first-letter") {
+                        let pseudo_element = try!(Impl::parse_pseudo_element(context, &name));
+                        Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
+                    } else {
+                        let pseudo_class = try!(parse_simple_pseudo_class(context, &name));
+                        Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo_class)))
                     }
                 }
                 Ok(Token::Function(name)) => {
