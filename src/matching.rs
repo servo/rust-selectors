@@ -38,22 +38,22 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 /// element name, etc. will contain the Rules that actually match that
 /// element.
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-pub struct SelectorMap<T, E: Element> {
+pub struct SelectorMap<T, Impl: SelectorImpl> {
     // TODO: Tune the initial capacity of the HashMap
-    id_hash: HashMap<Atom, Vec<Rule<T, E::Impl>>>,
-    class_hash: HashMap<Atom, Vec<Rule<T, E::Impl>>>,
-    local_name_hash: HashMap<Atom, Vec<Rule<T, E::Impl>>>,
+    id_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
+    class_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
+    local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
-    lower_local_name_hash: HashMap<Atom, Vec<Rule<T, E::Impl>>>,
+    lower_local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
     // For Rules that don't have ID, class, or element selectors.
-    universal_rules: Vec<Rule<T, E::Impl>>,
+    universal_rules: Vec<Rule<T, Impl>>,
     /// Whether this hash is empty.
     empty: bool,
 }
 
-impl<T, E: Element> SelectorMap<T, E> {
-    pub fn new() -> SelectorMap<T, E> {
+impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
+    pub fn new() -> SelectorMap<T, Impl> {
         SelectorMap {
             id_hash: hash_map::new(),
             class_hash: hash_map::new(),
@@ -68,12 +68,13 @@ impl<T, E: Element> SelectorMap<T, E> {
     ///
     /// Extract matching rules as per element's ID, classes, tag name, etc..
     /// Sort the Rules at the end to maintain cascading order.
-    pub fn get_all_matching_rules<V>(&self,
-                                     element: &E,
-                                     parent_bf: Option<&BloomFilter>,
-                                     matching_rules_list: &mut V,
-                                     shareable: &mut bool)
-                                     where V: VecLike<DeclarationBlock<T>> {
+    pub fn get_all_matching_rules<E, V>(&self,
+                                        element: &E,
+                                        parent_bf: Option<&BloomFilter>,
+                                        matching_rules_list: &mut V,
+                                        shareable: &mut bool)
+                                        where E: Element<Impl=Impl>,
+                                              V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
         }
@@ -124,13 +125,14 @@ impl<T, E: Element> SelectorMap<T, E> {
         }
     }
 
-    fn get_matching_rules_from_hash<V>(element: &E,
-                                       parent_bf: Option<&BloomFilter>,
-                                       hash: &HashMap<Atom, Vec<Rule<T, E::Impl>>>,
-                                       key: &Atom,
-                                       matching_rules: &mut V,
-                                       shareable: &mut bool)
-                                       where V: VecLike<DeclarationBlock<T>> {
+    fn get_matching_rules_from_hash<E, V>(element: &E,
+                                          parent_bf: Option<&BloomFilter>,
+                                          hash: &HashMap<Atom, Vec<Rule<T, Impl>>>,
+                                          key: &Atom,
+                                          matching_rules: &mut V,
+                                          shareable: &mut bool)
+                                          where E: Element<Impl=Impl>,
+                                                V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
                 SelectorMap::get_matching_rules(element,
@@ -144,12 +146,13 @@ impl<T, E: Element> SelectorMap<T, E> {
     }
 
     /// Adds rules in `rules` that match `element` to the `matching_rules` list.
-    fn get_matching_rules<V>(element: &E,
-                             parent_bf: Option<&BloomFilter>,
-                             rules: &[Rule<T, E::Impl>],
-                             matching_rules: &mut V,
-                             shareable: &mut bool)
-                             where V: VecLike<DeclarationBlock<T>> {
+    fn get_matching_rules<E, V>(element: &E,
+                                parent_bf: Option<&BloomFilter>,
+                                rules: &[Rule<T, Impl>],
+                                matching_rules: &mut V,
+                                shareable: &mut bool)
+                                where E: Element<Impl=Impl>,
+                                      V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {
                 matching_rules.push(rule.declarations.clone());
@@ -159,20 +162,20 @@ impl<T, E: Element> SelectorMap<T, E> {
 
     /// Insert rule into the correct hash.
     /// Order in which to try: id_hash, class_hash, local_name_hash, universal_rules.
-    pub fn insert(&mut self, rule: Rule<T, E::Impl>) {
+    pub fn insert(&mut self, rule: Rule<T, Impl>) {
         self.empty = false;
 
-        if let Some(id_name) = SelectorMap::<T, E>::get_id_name(&rule) {
+        if let Some(id_name) = SelectorMap::get_id_name(&rule) {
             find_push(&mut self.id_hash, id_name, rule);
             return;
         }
 
-        if let Some(class_name) = SelectorMap::<T, E>::get_class_name(&rule) {
+        if let Some(class_name) = SelectorMap::get_class_name(&rule) {
             find_push(&mut self.class_hash, class_name, rule);
             return;
         }
 
-        if let Some(LocalName { name, lower_name }) = SelectorMap::<T, E>::get_local_name(&rule) {
+        if let Some(LocalName { name, lower_name }) = SelectorMap::get_local_name(&rule) {
             find_push(&mut self.local_name_hash, name, rule.clone());
             find_push(&mut self.lower_local_name_hash, lower_name, rule);
             return;
@@ -182,7 +185,7 @@ impl<T, E: Element> SelectorMap<T, E> {
     }
 
     /// Retrieve the first ID name in Rule, or None otherwise.
-    fn get_id_name(rule: &Rule<T, E::Impl>) -> Option<Atom> {
+    fn get_id_name(rule: &Rule<T, Impl>) -> Option<Atom> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -196,7 +199,7 @@ impl<T, E: Element> SelectorMap<T, E> {
     }
 
     /// Retrieve the FIRST class name in Rule, or None otherwise.
-    fn get_class_name(rule: &Rule<T, E::Impl>) -> Option<Atom> {
+    fn get_class_name(rule: &Rule<T, Impl>) -> Option<Atom> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -210,7 +213,7 @@ impl<T, E: Element> SelectorMap<T, E> {
     }
 
     /// Retrieve the name if it is a type selector, or None otherwise.
-    fn get_local_name(rule: &Rule<T, E::Impl>) -> Option<LocalName> {
+    fn get_local_name(rule: &Rule<T, Impl>) -> Option<LocalName> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -281,11 +284,12 @@ impl<T> DeclarationBlock<T> {
     }
 }
 
-pub fn matches<E>(selector_list: &[Selector<E::Impl>],
-                  element: &E,
-                  parent_bf: Option<&BloomFilter>)
-                  -> bool
-                  where E: Element {
+pub fn matches<Impl, E>(selector_list: &[Selector<Impl>],
+                        element: &E,
+                        parent_bf: Option<&BloomFilter>)
+                        -> bool
+                        where Impl: SelectorImpl,
+                              E: Element<Impl=Impl> {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
         matches_compound_selector(&*selector.compound_selectors, element, parent_bf, &mut false)
@@ -298,12 +302,13 @@ pub fn matches<E>(selector_list: &[Selector<E::Impl>],
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
 /// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
-pub fn matches_compound_selector<E>(selector: &CompoundSelector<E::Impl>,
-                                    element: &E,
-                                    parent_bf: Option<&BloomFilter>,
-                                    shareable: &mut bool)
-                                    -> bool
-                                    where E: Element {
+pub fn matches_compound_selector<Impl, E>(selector: &CompoundSelector<Impl>,
+                                          element: &E,
+                                          parent_bf: Option<&BloomFilter>,
+                                          shareable: &mut bool)
+                                          -> bool
+                                          where Impl: SelectorImpl,
+                                                E: Element<Impl=Impl> {
     match matches_compound_selector_internal(selector, element, parent_bf, shareable) {
         SelectorMatchingResult::Matched => true,
         _ => false
@@ -363,12 +368,13 @@ enum SelectorMatchingResult {
 /// Quickly figures out whether or not the compound selector is worth doing more
 /// work on. If the simple selectors don't match, or there's a child selector
 /// that does not appear in the bloom parent bloom filter, we can exit early.
-fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
-                      element: &E,
-                      parent_bf: Option<&BloomFilter>,
-                      shareable: &mut bool)
-                      -> Option<SelectorMatchingResult>
-                      where E: Element {
+fn can_fast_reject<Impl, E>(mut selector: &CompoundSelector<Impl>,
+                            element: &E,
+                            parent_bf: Option<&BloomFilter>,
+                            shareable: &mut bool)
+                            -> Option<SelectorMatchingResult>
+                            where Impl: SelectorImpl,
+                                  E: Element<Impl=Impl> {
     if !selector.simple_selectors.iter().all(|simple_selector| {
       matches_simple_selector(simple_selector, element, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
@@ -780,36 +786,9 @@ mod tests {
     use super::{DeclarationBlock, Rule, SelectorMap};
     use parser::LocalName;
     use parser::tests::DummySelectorImpl;
-    use string_cache::{Atom, Namespace};
+    use string_cache::Atom;
     use cssparser::Parser;
     use parser::ParserContext;
-    use tree::Element;
-    use parser::{AttrSelector, SelectorImpl};
-
-    struct DummyElement;
-    impl Element for DummyElement {
-        type Impl = DummySelectorImpl;
-        fn parent_element(&self) -> Option<Self> { None }
-        fn first_child_element(&self) -> Option<Self> { None }
-        fn last_child_element(&self) -> Option<Self> { None }
-        fn prev_sibling_element(&self) -> Option<Self> { None }
-        fn next_sibling_element(&self) -> Option<Self> { None }
-        fn is_html_element_in_html_document(&self) -> bool { false }
-        fn get_local_name(&self) -> &Atom { unimplemented!(); }
-        fn get_namespace(&self) -> &Namespace { unimplemented!(); }
-        fn match_non_ts_pseudo_class(&self, _: <Self::Impl as SelectorImpl>::NonTSPseudoClass) -> bool { false }
-        fn get_id(&self) -> Option<Atom> { None }
-        fn has_class(&self, _: &Atom) -> bool { false }
-        fn match_attr<F>(&self,
-                         _: &AttrSelector,
-                         _: F) -> bool
-                         where F: Fn(&str) -> bool { false }
-        fn is_empty(&self) -> bool { false }
-        fn is_root(&self) -> bool { false }
-        fn each_class<F>(&self,
-                         _: F)
-                         where F: FnMut(&Atom) {}
-    }
 
     /// Helper method to get some Rules from selector strings.
     /// Each sublist of the result contains the Rules for one StyleRule.
@@ -844,22 +823,22 @@ mod tests {
     #[test]
     fn test_get_id_name(){
         let rules_list = get_mock_rules(&[".intro", "#top"]);
-        assert_eq!(SelectorMap::<(), DummyElement>::get_id_name(&rules_list[0][0]), None);
-        assert_eq!(SelectorMap::<(), DummyElement>::get_id_name(&rules_list[1][0]), Some(atom!("top")));
+        assert_eq!(SelectorMap::get_id_name(&rules_list[0][0]), None);
+        assert_eq!(SelectorMap::get_id_name(&rules_list[1][0]), Some(atom!("top")));
     }
 
     #[test]
     fn test_get_class_name(){
         let rules_list = get_mock_rules(&[".intro.foo", "#top"]);
-        assert_eq!(SelectorMap::<(), DummyElement>::get_class_name(&rules_list[0][0]), Some(Atom::from("intro")));
-        assert_eq!(SelectorMap::<(), DummyElement>::get_class_name(&rules_list[1][0]), None);
+        assert_eq!(SelectorMap::get_class_name(&rules_list[0][0]), Some(Atom::from("intro")));
+        assert_eq!(SelectorMap::get_class_name(&rules_list[1][0]), None);
     }
 
     #[test]
     fn test_get_local_name(){
         let rules_list = get_mock_rules(&["img.foo", "#top", "IMG", "ImG"]);
         let check = |i: usize, names: Option<(&str, &str)>| {
-            assert!(SelectorMap::<(), DummyElement>::get_local_name(&rules_list[i][0])
+            assert!(SelectorMap::get_local_name(&rules_list[i][0])
                     == names.map(|(name, lower_name)| LocalName {
                             name: Atom::from(name),
                             lower_name: Atom::from(lower_name) }))
@@ -873,7 +852,7 @@ mod tests {
     #[test]
     fn test_insert(){
         let rules_list = get_mock_rules(&[".intro.foo", "#top"]);
-        let mut selector_map = SelectorMap::<(), DummyElement>::new();
+        let mut selector_map = SelectorMap::new();
         selector_map.insert(rules_list[1][0].clone());
         assert_eq!(1, selector_map.id_hash.get(&atom!("top")).unwrap()[0].declarations.source_order);
         selector_map.insert(rules_list[0][0].clone());
