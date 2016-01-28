@@ -284,12 +284,11 @@ impl<T> DeclarationBlock<T> {
     }
 }
 
-pub fn matches<Impl, E>(selector_list: &[Selector<Impl>],
-                        element: &E,
-                        parent_bf: Option<&BloomFilter>)
-                        -> bool
-                        where Impl: SelectorImpl,
-                              E: Element<Impl=Impl> {
+pub fn matches<E>(selector_list: &[Selector<E::Impl>],
+                  element: &E,
+                  parent_bf: Option<&BloomFilter>)
+                  -> bool
+                  where E: Element {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
         matches_compound_selector(&*selector.compound_selectors, element, parent_bf, &mut false)
@@ -302,13 +301,12 @@ pub fn matches<Impl, E>(selector_list: &[Selector<Impl>],
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
 /// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
-pub fn matches_compound_selector<Impl, E>(selector: &CompoundSelector<Impl>,
-                                          element: &E,
-                                          parent_bf: Option<&BloomFilter>,
-                                          shareable: &mut bool)
-                                          -> bool
-                                          where Impl: SelectorImpl,
-                                                E: Element<Impl=Impl> {
+pub fn matches_compound_selector<E>(selector: &CompoundSelector<E::Impl>,
+                                    element: &E,
+                                    parent_bf: Option<&BloomFilter>,
+                                    shareable: &mut bool)
+                                    -> bool
+                                    where E: Element {
     match matches_compound_selector_internal(selector, element, parent_bf, shareable) {
         SelectorMatchingResult::Matched => true,
         _ => false
@@ -368,13 +366,12 @@ enum SelectorMatchingResult {
 /// Quickly figures out whether or not the compound selector is worth doing more
 /// work on. If the simple selectors don't match, or there's a child selector
 /// that does not appear in the bloom parent bloom filter, we can exit early.
-fn can_fast_reject<Impl, E>(mut selector: &CompoundSelector<Impl>,
-                            element: &E,
-                            parent_bf: Option<&BloomFilter>,
-                            shareable: &mut bool)
-                            -> Option<SelectorMatchingResult>
-                            where Impl: SelectorImpl,
-                                  E: Element<Impl=Impl> {
+fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
+                      element: &E,
+                      parent_bf: Option<&BloomFilter>,
+                      shareable: &mut bool)
+                      -> Option<SelectorMatchingResult>
+                      where E: Element {
     if !selector.simple_selectors.iter().all(|simple_selector| {
       matches_simple_selector(simple_selector, element, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
@@ -430,13 +427,12 @@ fn can_fast_reject<Impl, E>(mut selector: &CompoundSelector<Impl>,
     return None;
 }
 
-fn matches_compound_selector_internal<Impl, E>(selector: &CompoundSelector<Impl>,
-                                               element: &E,
-                                               parent_bf: Option<&BloomFilter>,
-                                               shareable: &mut bool)
-                                               -> SelectorMatchingResult
-                                               where Impl: SelectorImpl,
-                                                     E: Element<Impl=Impl> {
+fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
+                                         element: &E,
+                                         parent_bf: Option<&BloomFilter>,
+                                         shareable: &mut bool)
+                                         -> SelectorMatchingResult
+                                         where E: Element {
     if let Some(result) = can_fast_reject(selector, element, parent_bf, shareable) {
         return result;
     }
@@ -561,12 +557,11 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 /// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<Impl, E>(selector: &SimpleSelector<Impl>,
-                                        element: &E,
-                                        shareable: &mut bool)
-                                        -> bool
-                                        where Impl: SelectorImpl,
-                                              E: Element<Impl=Impl> {
+pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
+                                  element: &E,
+                                  shareable: &mut bool)
+                                  -> bool
+                                  where E: Element {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
