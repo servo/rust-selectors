@@ -6,6 +6,7 @@ use std::ascii::AsciiExt;
 use std::borrow::Cow;
 use std::cmp;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::sync::Arc;
 #[cfg(feature = "heap_size")]
 use heapsize::HeapSizeOf;
@@ -33,9 +34,9 @@ pub trait SelectorImpl {
 
     /// pseudo-elements
     #[cfg(feature = "heap_size")]
-    type PseudoElement: Sized + PartialEq + Clone + Debug + HeapSizeOf;
+    type PseudoElement: Sized + PartialEq + Eq + Clone + Debug + Hash + HeapSizeOf;
     #[cfg(not(feature = "heap_size"))]
-    type PseudoElement: Sized + PartialEq + Clone + Debug;
+    type PseudoElement: Sized + PartialEq + Eq + Clone + Debug + Hash;
     fn parse_pseudo_element(_context: &ParserContext,
                             _name: &str)
         -> Result<Self::PseudoElement, ()> { Err(()) }
@@ -647,7 +648,7 @@ pub mod tests {
         ServoNonZeroBorder,
     }
 
-    #[derive(PartialEq, Clone, Debug)]
+    #[derive(Eq, PartialEq, Clone, Debug, Hash)]
     pub enum PseudoElement {
         Before,
         After,
