@@ -284,6 +284,23 @@ impl<T> DeclarationBlock<T> {
     }
 }
 
+bitflags! {
+    #[doc = "Flags set on elements during the matching process."]
+    flags ElementFlags: u8 {
+        #[doc = "When a child is added or removed from this element, all the children must be"]
+        #[doc = "restyled, because they may match :nth-last-child, :last-of-type,"]
+        #[doc = ":nth-last-of-type, or :only-of-type."]
+        const HAS_SLOW_SELECTOR = 0x01,
+        #[doc = "When a child is added or removed from this element, any later children must be"]
+        #[doc = "restyled, because they may match :nth-child, :first-of-type, or :nth-of-type."]
+        const HAS_SLOW_SELECTOR_LATER_SIBLINGS = 0x02,
+        #[doc = "When a child is added or removed from this element, the first and last children"]
+        #[doc = "must be restyled, because they may match :first-child, :last-child, or"]
+        #[doc = ":only-child."]
+        const HAS_EDGE_CHILD_SELECTOR = 0x03,
+    }
+}
+
 pub fn matches<E>(selector_list: &[Selector<E::Impl>],
                   element: &E,
                   parent_bf: Option<&BloomFilter>)
@@ -741,12 +758,23 @@ fn matches_generic_nth_child<E>(element: &E,
         };
     }
 
-    if a == 0 {
+    let result = if a == 0 {
         b == index
     } else {
         (index - b) / a >= 0 &&
         (index - b) % a == 0
+    };
+
+    if result {
+        if let Some(parent) = element.parent_element() {
+            parent.insert_flags(if is_from_end {
+                HAS_SLOW_SELECTOR
+            } else {
+                HAS_SLOW_SELECTOR_LATER_SIBLINGS
+            });
+        }
     }
+    result
 }
 
 #[inline]
@@ -754,7 +782,13 @@ fn matches_first_child<E>(element: &E) -> bool where E: Element {
     // Selectors Level 4 changed from Level 3:
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
-    element.prev_sibling_element().is_none()
+    let result = element.prev_sibling_element().is_none();
+    if result {
+        if let Some(parent) = element.parent_element() {
+            parent.insert_flags(HAS_EDGE_CHILD_SELECTOR);
+        }
+    }
+    result
 }
 
 #[inline]
@@ -762,7 +796,13 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
     // Selectors Level 4 changed from Level 3:
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
-    element.next_sibling_element().is_none()
+    let result = element.next_sibling_element().is_none();
+    if result {
+        if let Some(parent) = element.parent_element() {
+            parent.insert_flags(HAS_EDGE_CHILD_SELECTOR);
+        }
+    }
+    result
 }
 
 fn find_push<T, Impl: SelectorImpl>(map: &mut HashMap<Atom, Vec<Rule<T, Impl>>>,

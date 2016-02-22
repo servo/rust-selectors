@@ -4,6 +4,8 @@
 
 //! Traits that nodes must implement. Breaks the otherwise-cyclic dependency between layout and
 //! style.
+
+use matching::ElementFlags;
 use parser::{AttrSelector, SelectorImpl};
 use string_cache::{Atom, Namespace};
 
@@ -52,4 +54,10 @@ pub trait Element: Sized {
     // in the future when we have associated types and/or a more convenient
     // JS GC story... --pcwalton
     fn each_class<F>(&self, callback: F) where F: FnMut(&Atom);
+
+    /// Add flags to the element. See the `ElementFlags` docs for details.
+    ///
+    /// This may be called while the element *or one of its children* is being matched. Therefore
+    /// the implementation must be thread-safe if children may be matched in parallel.
+    fn insert_flags(&self, _flags: ElementFlags) {}
 }
