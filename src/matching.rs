@@ -604,9 +604,11 @@ fn matches_complex_selector_internal<E>(selector: &ComplexSelector<E::Impl>,
 /// will almost certainly break as elements will start mistakenly sharing styles. (See
 /// `can_share_style_with` in `servo/components/style/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
-                                  element: &E,
-                                  relations: &mut StyleRelations) -> bool
+fn matches_simple_selector<E>(
+        selector: &SimpleSelector<E::Impl>,
+        element: &E,
+        relations: &mut StyleRelations)
+        -> bool
     where E: Element
 {
     macro_rules! relation_if {
