@@ -25,9 +25,9 @@ pub trait SelectorImpl {
     /// non tree-structural pseudo-classes
     /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
     #[cfg(feature = "heap_size")]
-    type NonTSPseudoClass: Sized + PartialEq + Clone + Debug + HeapSizeOf;
+    type NonTSPseudoClass: Clone + Debug + Eq + Hash + HeapSizeOf + PartialEq + Sized;
     #[cfg(not(feature = "heap_size"))]
-    type NonTSPseudoClass: Sized + PartialEq + Clone + Debug;
+    type NonTSPseudoClass: Clone + Debug + Eq + Hash + PartialEq + Sized;
 
     /// This function can return an "Err" pseudo-element in order to support CSS2.1
     /// pseudo-elements.
@@ -70,14 +70,14 @@ pub struct Selector<Impl: SelectorImpl> {
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ComplexSelector<Impl: SelectorImpl> {
     pub compound_selector: Vec<SimpleSelector<Impl>>,
     pub next: Option<(Arc<ComplexSelector<Impl>>, Combinator)>,  // c.next is left of c
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Combinator {
     Child,  //  >
     Descendant,  // space
@@ -86,7 +86,7 @@ pub enum Combinator {
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-#[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SimpleSelector<Impl: SelectorImpl> {
     ID(Atom),
     Class(Atom),
@@ -103,7 +103,7 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
     AttrSuffixMatch(AttrSelector, String),  // [foo$=bar]
 
     // Pseudo-classes
-    Negation(Vec<SimpleSelector<Impl>>),
+    Negation(Vec<Arc<ComplexSelector<Impl>>>),
     FirstChild, LastChild, OnlyChild,
     Root,
     Empty,
@@ -151,6 +151,8 @@ pub enum NamespaceConstraint {
 
 const MAX_10BIT: u32 = (1u32 << 10) - 1;
 
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct Specificity {
     id_selectors: u32,
     class_like_selectors: u32,
@@ -244,8 +246,11 @@ fn complex_selector_specificity<Impl>(mut selector: &ComplexSelector<Impl>)
                 SimpleSelector::NonTSPseudoClass(..) =>
                     specificity.class_like_selectors += 1,
                 SimpleSelector::Namespace(..) => (),
-                SimpleSelector::Negation(ref negated) =>
-                    compound_selector_specificity(negated, specificity),
+                SimpleSelector::Negation(ref negated) => {
+                    let negated_specificities =
+                        negated.iter().map(|sel| complex_selector_specificity(sel));
+                    *specificity = *specificity + negated_specificities.max().unwrap();
+                }
             }
         }
     }
@@ -289,7 +294,6 @@ pub fn parse_selector_list<Impl>(context: &ParserContext, input: &mut Parser)
 fn parse_selector<Impl>(context: &ParserContext, input: &mut Parser)
                         -> Result<Selector<Impl>, ()>
                         where Impl: SelectorImpl {
-    skip_whitespace(input);
     let complex =
         try!(parse_complex_selector::<Impl>(context, input));
     let pseudo_element = try!(parse_pseudo_element::<Impl>(context, input));
@@ -314,8 +318,9 @@ fn parse_selector<Impl>(context: &ParserContext, input: &mut Parser)
 fn parse_complex_selector<Impl>(context: &ParserContext, input: &mut Parser)
                                 -> Result<ComplexSelector<Impl>, ()>
                                 where Impl: SelectorImpl {
+    skip_whitespace(input);
     let compound =
-        try!(parse_compound_selector::<Impl>(context, input, /* inside_negation = */ false));
+        try!(parse_compound_selector::<Impl>(context, input));
     let mut complex = ComplexSelector { compound_selector: compound, next: None };
     if complex.compound_selector.is_empty() {
         return Ok(complex);
@@ -356,7 +361,7 @@ fn parse_complex_selector<Impl>(context: &ParserContext, input: &mut Parser)
             skip_whitespace(input);
         }
         let compound =
-            try!(parse_compound_selector::<Impl>(context, input, /* inside_negation = */ false));
+            try!(parse_compound_selector::<Impl>(context, input));
         complex = ComplexSelector {
             compound_selector: compound,
             next: Some((Arc::new(complex), combinator)),
@@ -376,14 +381,13 @@ fn parse_complex_selector<Impl>(context: &ParserContext, input: &mut Parser)
 ///
 /// * `Err(())`: Invalid sequence, abort.
 fn parse_compound_selector<Impl>(context: &ParserContext,
-                                 input: &mut Parser,
-                                 inside_negation: bool)
+                                 input: &mut Parser)
                                  -> Result<Vec<SimpleSelector<Impl>>, ()>
                                  where Impl: SelectorImpl {
     let mut compound_selector =
         try!(parse_type_selector::<Impl>(context, input)).unwrap_or(vec![]);
     loop {
-        match try!(parse_one_simple_selector::<Impl>(context, input, inside_negation)) {
+        match try!(parse_one_simple_selector::<Impl>(context, input)) {
             None => break,
             Some(s) => compound_selector.push(s),
         }
@@ -552,30 +556,15 @@ fn parse_attribute_flags(input: &mut Parser) -> Result<CaseSensitivity, ()> {
     }
 }
 
-
-/// Level 3: Parse **one** simple_selector
-fn parse_negation<Impl: SelectorImpl>(context: &ParserContext,
-                                      input: &mut Parser)
+fn parse_negation<Impl: SelectorImpl>(context: &ParserContext, input: &mut Parser)
                                       -> Result<SimpleSelector<Impl>, ()> {
-    match try!(parse_type_selector(context, input)) {
-        Some(type_selector) => Ok(SimpleSelector::Negation(type_selector)),
-        None => {
-            match try!(parse_one_simple_selector(context,
-                                                 input,
-                                                 /* inside_negation = */ true)) {
-                Some(simple_selector) => {
-                    Ok(SimpleSelector::Negation(vec![simple_selector]))
-                }
-                None => Err(())
-            }
-        },
-    }
+    input.parse_comma_separated(|input| parse_complex_selector(context, input).map(Arc::new))
+         .map(SimpleSelector::Negation)
 }
 
 fn parse_functional_pseudo_class<Impl>(context: &ParserContext,
                                        input: &mut Parser,
-                                       name: &str,
-                                       inside_negation: bool)
+                                       name: &str)
                                        -> Result<SimpleSelector<Impl>, ()>
                                        where Impl: SelectorImpl {
     match_ignore_ascii_case! { name,
@@ -583,13 +572,7 @@ fn parse_functional_pseudo_class<Impl>(context: &ParserContext,
         "nth-of-type" => parse_nth_pseudo_class(input, SimpleSelector::NthOfType),
         "nth-last-child" => parse_nth_pseudo_class(input, SimpleSelector::NthLastChild),
         "nth-last-of-type" => parse_nth_pseudo_class(input, SimpleSelector::NthLastOfType),
-        "not" => {
-            if inside_negation {
-                Err(())
-            } else {
-                parse_negation(context, input)
-            }
-        },
+        "not" => parse_negation(context, input),
         _ => Err(())
     }
 }
@@ -607,9 +590,7 @@ where F: FnOnce(i32, i32) -> SimpleSelector<Impl> {
 /// * `Err(())`: Invalid selector, abort.
 /// * `Ok(None)`: Not a simple selector, could be something else; `input` was not consumed.
 /// * `Ok(Some(_))`: Parsed a simple selector.
-fn parse_one_simple_selector<Impl>(context: &ParserContext,
-                                   input: &mut Parser,
-                                   inside_negation: bool)
+fn parse_one_simple_selector<Impl>(context: &ParserContext, input: &mut Parser)
                                    -> Result<Option<SimpleSelector<Impl>>, ()>
                                    where Impl: SelectorImpl {
     let start_position = input.position();
@@ -645,7 +626,7 @@ fn parse_one_simple_selector<Impl>(context: &ParserContext,
                 }
                 Ok(Token::Function(name)) => {
                     let pseudo = try!(input.parse_nested_block(|input| {
-                        parse_functional_pseudo_class(context, input, &name, inside_negation)
+                        parse_functional_pseudo_class(context, input, &name)
                     }));
                     Ok(Some(pseudo))
                 }
@@ -740,12 +721,12 @@ pub mod tests {
     use string_cache::Atom;
     use super::*;
 
-    #[derive(PartialEq, Clone, Debug)]
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
     pub enum PseudoClass {
         ServoNonZeroBorder,
     }
 
-    #[derive(Eq, PartialEq, Clone, Debug, Hash)]
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
     pub enum PseudoElement {
         Before,
         After,
@@ -946,6 +927,25 @@ pub mod tests {
             }),
             pseudo_element: None,
             specificity: (1 << 20) + (1 << 10) + (0 << 0),
-        }]))
+        }]));
+        assert_eq!(parse(":not(.babybel, .provel)"), Ok(vec!(Selector {
+            complex_selector: Arc::new(ComplexSelector {
+                compound_selector: vec!(SimpleSelector::Negation(
+                    vec!(
+                        Arc::new(ComplexSelector {
+                            compound_selector: vec!(SimpleSelector::Class(Atom::from("babybel"))),
+                            next: None
+                        }),
+                        Arc::new(ComplexSelector {
+                            compound_selector: vec!(SimpleSelector::Class(Atom::from("provel"))),
+                            next: None
+                        }),
+                    )
+                )),
+                next: None,
+            }),
+            pseudo_element: None,
+            specificity: specificity(0, 1, 0),
+        })));
     }
 }
