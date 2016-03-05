@@ -572,11 +572,12 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 /// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
 /// `main/css/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
-                                  element: &E,
-                                  shareable: &mut bool)
-                                  -> bool
-                                  where E: Element {
+fn matches_simple_selector<E>(
+        selector: &SimpleSelector<E::Impl>,
+        element: &E,
+        shareable: &mut bool)
+        -> bool
+        where E: Element {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
