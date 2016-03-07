@@ -32,6 +32,11 @@ pub trait SelectorImpl {
                                  _name: &str)
         -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
 
+    fn parse_non_ts_functional_pseudo_class(_context: &ParserContext,
+                                            _name: &str,
+                                            _arguments: &mut Parser)
+        -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+
     /// pseudo-elements
     #[cfg(feature = "heap_size")]
     type PseudoElement: Sized + PartialEq + Eq + Clone + Debug + Hash + HeapSizeOf;
@@ -538,7 +543,8 @@ fn parse_functional_pseudo_class<Impl: SelectorImpl>(context: &ParserContext,
                 parse_negation(context, input)
             }
         },
-        _ => Err(())
+        _ => Impl::parse_non_ts_functional_pseudo_class(context, name, input)
+            .map(SimpleSelector::NonTSPseudoClass)
     }
 }
 
@@ -646,6 +652,7 @@ pub mod tests {
     #[derive(PartialEq, Clone, Debug)]
     pub enum PseudoClass {
         ServoNonZeroBorder,
+        Lang(String),
     }
 
     #[derive(Eq, PartialEq, Clone, Debug, Hash)]
@@ -668,6 +675,14 @@ pub mod tests {
                         Err(())
                     }
                 },
+                _ => Err(())
+            }
+        }
+
+        fn parse_non_ts_functional_pseudo_class(_context: &ParserContext, name: &str,
+                                                parser: &mut Parser) -> Result<PseudoClass, ()> {
+            match_ignore_ascii_case! { name,
+                "lang" => Ok(PseudoClass::Lang(try!(parser.expect_ident_or_string()).into_owned())),
                 _ => Err(())
             }
         }
@@ -703,6 +718,8 @@ pub mod tests {
     #[test]
     fn test_parsing() {
         assert_eq!(parse(""), Err(())) ;
+        assert_eq!(parse(":lang(4)"), Err(())) ;
+        assert_eq!(parse(":lang(en US)"), Err(())) ;
         assert_eq!(parse("EeÉ"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
@@ -713,13 +730,16 @@ pub mod tests {
             pseudo_element: None,
             specificity: specificity(0, 0, 1),
         })));
-        assert_eq!(parse(".foo"), Ok(vec!(Selector {
+        assert_eq!(parse(".foo:lang(en-US)"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::Class(Atom::from("foo"))),
+                simple_selectors: vec![
+                    SimpleSelector::Class(Atom::from("foo")),
+                    SimpleSelector::NonTSPseudoClass(PseudoClass::Lang("en-US".to_owned()))
+                ],
                 next: None,
             }),
             pseudo_element: None,
-            specificity: specificity(0, 1, 0),
+            specificity: specificity(0, 2, 0),
         })));
         assert_eq!(parse("#bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
