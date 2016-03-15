@@ -14,7 +14,7 @@ use heapsize::HeapSizeOf;
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
 
-use hash_map;
+use HashMap;
 
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
@@ -50,7 +50,7 @@ pub trait SelectorImpl {
 pub struct ParserContext {
     pub in_user_agent_stylesheet: bool,
     pub default_namespace: Option<Namespace>,
-    pub namespace_prefixes: hash_map::HashMap<String, Namespace>,
+    pub namespace_prefixes: HashMap<String, Namespace>,
 }
 
 impl ParserContext {
@@ -58,7 +58,7 @@ impl ParserContext {
         ParserContext {
             in_user_agent_stylesheet: false,
             default_namespace: None,
-            namespace_prefixes: hash_map::new(),
+            namespace_prefixes: HashMap::default(),
         }
     }
 }
