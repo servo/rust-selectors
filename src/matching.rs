@@ -13,7 +13,7 @@ use string_cache::Atom;
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
-use hash_map::{self, HashMap};
+use HashMap;
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -55,10 +55,10 @@ pub struct SelectorMap<T, Impl: SelectorImpl> {
 impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     pub fn new() -> SelectorMap<T, Impl> {
         SelectorMap {
-            id_hash: hash_map::new(),
-            class_hash: hash_map::new(),
-            local_name_hash: hash_map::new(),
-            lower_local_name_hash: hash_map::new(),
+            id_hash: HashMap::default(),
+            class_hash: HashMap::default(),
+            local_name_hash: HashMap::default(),
+            lower_local_name_hash: HashMap::default(),
             universal_rules: vec!(),
             empty: true,
         }
