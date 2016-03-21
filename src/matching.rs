@@ -388,7 +388,7 @@ fn can_fast_reject<E>(mut selector: &ComplexSelector<E::Impl>,
                       -> Option<SelectorMatchingResult>
                       where E: Element {
     if !selector.compound_selector.iter().all(|simple_selector| {
-      matches_simple_selector(simple_selector, element, shareable) }) {
+      matches_simple_selector(simple_selector, element, parent_bf, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
     }
 
@@ -575,6 +575,7 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 fn matches_simple_selector<E>(
         selector: &SimpleSelector<E::Impl>,
         element: &E,
+        parent_bf: Option<&BloomFilter>,
         shareable: &mut bool)
         -> bool
         where E: Element {
@@ -715,7 +716,9 @@ fn matches_simple_selector<E>(
         }
         SimpleSelector::Negation(ref negated) => {
             *shareable = false;
-            !negated.iter().all(|s| matches_simple_selector(s, element, shareable))
+            !negated.iter().all(|s| {
+                matches_complex_selector(s, element, parent_bf, shareable)
+            })
         }
     }
 }
