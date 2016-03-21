@@ -475,7 +475,7 @@ fn can_fast_reject<E>(mut selector: &ComplexSelector<E::Impl>,
     where E: Element
 {
     if !selector.compound_selector.iter().all(|simple_selector| {
-      matches_simple_selector(simple_selector, element, relations) }) {
+      matches_simple_selector(simple_selector, element, parent_bf, relations) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
     }
 
@@ -607,6 +607,7 @@ fn matches_complex_selector_internal<E>(selector: &ComplexSelector<E::Impl>,
 fn matches_simple_selector<E>(
         selector: &SimpleSelector<E::Impl>,
         element: &E,
+        parent_bf: Option<&BloomFilter>,
         relations: &mut StyleRelations)
         -> bool
     where E: Element
@@ -730,7 +731,9 @@ fn matches_simple_selector<E>(
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::Negation(ref negated) => {
-            negated.iter().any(|s| !matches_simple_selector(s, element, relations))
+            negated.iter().any(|s| {
+                !matches_complex_selector(s, element, parent_bf, relations)
+            })
         }
     }
 }
