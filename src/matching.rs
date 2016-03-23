@@ -286,7 +286,7 @@ impl<T> DeclarationBlock<T> {
 
 bitflags! {
     #[doc = "Flags set on elements during the matching process."]
-    flags ElementFlags: u8 {
+    pub flags ElementFlags: u8 {
         #[doc = "When a child is added or removed from this element, all the children must be"]
         #[doc = "restyled, because they may match :nth-last-child, :last-of-type,"]
         #[doc = ":nth-last-of-type, or :only-of-type."]
@@ -513,7 +513,7 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
 }
 
 bitflags! {
-    flags CommonStyleAffectingAttributes: u8 {
+    pub flags CommonStyleAffectingAttributes: u8 {
         const HIDDEN_ATTRIBUTE = 0x01,
         const NO_WRAP_ATTRIBUTE = 0x02,
         const ALIGN_LEFT_ATTRIBUTE = 0x04,

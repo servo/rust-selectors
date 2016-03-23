@@ -16,7 +16,7 @@ unstable = ["string_cache/unstable"]
 heap_size = ["string_cache/heap_size", "heapsize", "heapsize_plugin"]
 
 [dependencies]
-bitflags = "0.3"
+bitflags = "0.5"
 matches = "0.1"
 cssparser = "0.5"
 smallvec = "0.1"
