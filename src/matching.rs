@@ -512,61 +512,6 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
     }
 }
 
-bitflags! {
-    pub flags CommonStyleAffectingAttributes: u8 {
-        const HIDDEN_ATTRIBUTE = 0x01,
-        const NO_WRAP_ATTRIBUTE = 0x02,
-        const ALIGN_LEFT_ATTRIBUTE = 0x04,
-        const ALIGN_CENTER_ATTRIBUTE = 0x08,
-        const ALIGN_RIGHT_ATTRIBUTE = 0x10,
-    }
-}
-
-pub struct CommonStyleAffectingAttributeInfo {
-    pub atom: Atom,
-    pub mode: CommonStyleAffectingAttributeMode,
-}
-
-#[derive(Copy, Clone)]
-pub enum CommonStyleAffectingAttributeMode {
-    IsPresent(CommonStyleAffectingAttributes),
-    IsEqual(&'static str, CommonStyleAffectingAttributes),
-}
-
-// NB: This must match the order in `layout::css::matching::CommonStyleAffectingAttributes`.
-#[inline]
-pub fn common_style_affecting_attributes() -> [CommonStyleAffectingAttributeInfo; 5] {
-    [
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("hidden"),
-            mode: CommonStyleAffectingAttributeMode::IsPresent(HIDDEN_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("nowrap"),
-            mode: CommonStyleAffectingAttributeMode::IsPresent(NO_WRAP_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("left", ALIGN_LEFT_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("center", ALIGN_CENTER_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("right", ALIGN_RIGHT_ATTRIBUTE),
-        }
-    ]
-}
-
-/// Attributes that, if present, disable style sharing. All legacy HTML attributes must be in
-/// either this list or `common_style_affecting_attributes`. See the comment in
-/// `synthesize_presentational_hints_for_legacy_attributes`.
-pub fn rare_style_affecting_attributes() -> [Atom; 3] {
-    [ atom!("bgcolor"), atom!("border"), atom!("colspan") ]
-}
-
 /// Determines whether the given element matches the given single selector.
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
@@ -598,26 +543,11 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.has_class(class)
         }
         SimpleSelector::AttrExists(ref attr) => {
-            // NB(pcwalton): If you update this, remember to update the corresponding list in
-            // `can_share_style_with()` as well.
-            if common_style_affecting_attributes().iter().all(|common_attr_info| {
-                !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                    CommonStyleAffectingAttributeMode::IsPresent(_) => true,
-                    CommonStyleAffectingAttributeMode::IsEqual(..) => false,
-                })
-            }) {
-                *shareable = false;
-            }
+            *shareable = false;
             element.match_attr(attr, |_| true)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
-            if *value != "DIR" &&
-                    common_style_affecting_attributes().iter().all(|common_attr_info| {
-                        !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                            CommonStyleAffectingAttributeMode::IsEqual(target_value, _) => *value == target_value,
-                            CommonStyleAffectingAttributeMode::IsPresent(_) => false,
-                        })
-                    }) {
+            if *value != "DIR" {
                 // FIXME(pcwalton): Remove once we start actually supporting RTL text. This is in
                 // here because the UA style otherwise disables all style sharing completely.
                 *shareable = false
