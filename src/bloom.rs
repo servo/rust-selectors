@@ -187,7 +187,7 @@ impl BloomHash for usize {
 impl BloomHash for Atom {
     #[inline]
     fn bloom_hash(&self) -> u32 {
-        ((self.data >> 32) ^ self.data) as u32
+        self.get_hash()
     }
 }
 
