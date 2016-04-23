@@ -52,6 +52,11 @@ pub struct SelectorMap<T, Impl: SelectorImpl> {
     empty: bool,
 }
 
+#[inline]
+fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
+    (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
+}
+
 impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     pub fn new() -> SelectorMap<T, Impl> {
         SelectorMap {
@@ -119,10 +124,26 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
         // Sort only the rules we just added.
         sort_by(&mut matching_rules_list[init_len..], &compare);
+    }
 
-        fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
-            (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
+    /// Append to `rule_list` all universal Rules (rules with selector `*|*`) in
+    /// `self` sorted by specifity and source order.
+    pub fn get_universal_rules<V>(&self,
+                                  matching_rules_list: &mut V)
+                                  where V: VecLike<DeclarationBlock<T>> {
+        if self.empty {
+            return
         }
+
+        let init_len = matching_rules_list.len();
+
+        for rule in self.other_rules.iter() {
+            if rule.selector.simple_selectors.is_empty() {
+                matching_rules_list.push(rule.declarations.clone());
+            }
+        }
+
+        sort_by(&mut matching_rules_list[init_len..], &compare);
     }
 
     fn get_matching_rules_from_hash<E, V>(element: &E,
@@ -189,8 +210,8 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
-                // TODO(pradeep): Implement case-sensitivity based on the document type and quirks
-                // mode.
+                // TODO(pradeep): Implement case-sensitivity based on the
+                // document type and quirks mode.
                 SimpleSelector::ID(ref id) => return Some(id.clone()),
                 _ => {}
             }
@@ -203,8 +224,8 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
-                // TODO(pradeep): Implement case-sensitivity based on the document type and quirks
-                // mode.
+                // TODO(pradeep): Implement case-sensitivity based on the
+                // document type and quirks mode.
                 SimpleSelector::Class(ref class) => return Some(class.clone()),
                 _ => {}
             }
