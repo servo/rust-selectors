@@ -52,6 +52,11 @@ pub struct SelectorMap<T, Impl: SelectorImpl> {
     empty: bool,
 }
 
+#[inline]
+fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
+    (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
+}
+
 impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     pub fn new() -> SelectorMap<T, Impl> {
         SelectorMap {
@@ -119,10 +124,24 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
         // Sort only the rules we just added.
         sort_by(&mut matching_rules_list[init_len..], &compare);
+    }
 
-        fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
-            (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
+    /// Append to `rule_list` all universal Rules in `self` sorted by specifity
+    /// and source order.
+    pub fn get_universal_rules<V>(&self,
+                                  matching_rules_list: &mut V)
+                                  where V: VecLike<DeclarationBlock<T>> {
+        if self.empty {
+            return
         }
+
+        let init_len = matching_rules_list.len();
+
+        for rule in self.universal_rules.iter() {
+            matching_rules_list.push(rule.declarations.clone());
+        }
+
+        sort_by(&mut matching_rules_list[init_len..], &compare);
     }
 
     fn get_matching_rules_from_hash<E, V>(element: &E,
