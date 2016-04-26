@@ -46,8 +46,8 @@ pub struct SelectorMap<T, Impl: SelectorImpl> {
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
     lower_local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
-    // For Rules that don't have ID, class, or element selectors.
-    universal_rules: Vec<Rule<T, Impl>>,
+    /// Rules that don't have ID, class, or element selectors.
+    other_rules: Vec<Rule<T, Impl>>,
     /// Whether this hash is empty.
     empty: bool,
 }
@@ -59,7 +59,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
             class_hash: HashMap::default(),
             local_name_hash: HashMap::default(),
             lower_local_name_hash: HashMap::default(),
-            universal_rules: vec!(),
+            other_rules: vec!(),
             empty: true,
         }
     }
@@ -113,7 +113,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
         SelectorMap::get_matching_rules(element,
                                         parent_bf,
-                                        &self.universal_rules,
+                                        &self.other_rules,
                                         matching_rules_list,
                                         shareable);
 
@@ -161,7 +161,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Insert rule into the correct hash.
-    /// Order in which to try: id_hash, class_hash, local_name_hash, universal_rules.
+    /// Order in which to try: id_hash, class_hash, local_name_hash, other_rules.
     pub fn insert(&mut self, rule: Rule<T, Impl>) {
         self.empty = false;
 
@@ -181,7 +181,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
             return;
         }
 
-        self.universal_rules.push(rule);
+        self.other_rules.push(rule);
     }
 
     /// Retrieve the first ID name in Rule, or None otherwise.
