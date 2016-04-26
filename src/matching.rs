@@ -46,10 +46,15 @@ pub struct SelectorMap<T, Impl: SelectorImpl> {
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
     lower_local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
-    // For Rules that don't have ID, class, or element selectors.
-    universal_rules: Vec<Rule<T, Impl>>,
+    /// Rules that don't have ID, class, or element selectors.
+    other_rules: Vec<Rule<T, Impl>>,
     /// Whether this hash is empty.
     empty: bool,
+}
+
+#[inline]
+fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
+    (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
 }
 
 impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
@@ -59,7 +64,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
             class_hash: HashMap::default(),
             local_name_hash: HashMap::default(),
             lower_local_name_hash: HashMap::default(),
-            universal_rules: vec!(),
+            other_rules: vec!(),
             empty: true,
         }
     }
@@ -113,16 +118,33 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
         SelectorMap::get_matching_rules(element,
                                         parent_bf,
-                                        &self.universal_rules,
+                                        &self.other_rules,
                                         matching_rules_list,
                                         shareable);
 
         // Sort only the rules we just added.
         sort_by(&mut matching_rules_list[init_len..], &compare);
+    }
 
-        fn compare<T>(a: &DeclarationBlock<T>, b: &DeclarationBlock<T>) -> Ordering {
-            (a.specificity, a.source_order).cmp(&(b.specificity, b.source_order))
+    /// Append to `rule_list` all universal Rules (rules with selector `*|*`) in
+    /// `self` sorted by specifity and source order.
+    pub fn get_universal_rules<V>(&self,
+                                  matching_rules_list: &mut V)
+                                  where V: VecLike<DeclarationBlock<T>> {
+        if self.empty {
+            return
         }
+
+        let init_len = matching_rules_list.len();
+
+        for rule in self.other_rules.iter() {
+            if rule.selector.simple_selectors.is_empty() &&
+               rule.selector.next.is_none() {
+                matching_rules_list.push(rule.declarations.clone());
+            }
+        }
+
+        sort_by(&mut matching_rules_list[init_len..], &compare);
     }
 
     fn get_matching_rules_from_hash<E, V>(element: &E,
@@ -161,7 +183,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Insert rule into the correct hash.
-    /// Order in which to try: id_hash, class_hash, local_name_hash, universal_rules.
+    /// Order in which to try: id_hash, class_hash, local_name_hash, other_rules.
     pub fn insert(&mut self, rule: Rule<T, Impl>) {
         self.empty = false;
 
@@ -181,7 +203,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
             return;
         }
 
-        self.universal_rules.push(rule);
+        self.other_rules.push(rule);
     }
 
     /// Retrieve the first ID name in Rule, or None otherwise.
@@ -189,8 +211,8 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
-                // TODO(pradeep): Implement case-sensitivity based on the document type and quirks
-                // mode.
+                // TODO(pradeep): Implement case-sensitivity based on the
+                // document type and quirks mode.
                 SimpleSelector::ID(ref id) => return Some(id.clone()),
                 _ => {}
             }
@@ -203,8 +225,8 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
-                // TODO(pradeep): Implement case-sensitivity based on the document type and quirks
-                // mode.
+                // TODO(pradeep): Implement case-sensitivity based on the
+                // document type and quirks mode.
                 SimpleSelector::Class(ref class) => return Some(class.clone()),
                 _ => {}
             }
@@ -846,6 +868,19 @@ mod tests {
         }).collect()
     }
 
+    fn get_mock_map(selectors: &[&str]) -> SelectorMap<(), DummySelectorImpl> {
+        let mut map = SelectorMap::new();
+        let selector_rules = get_mock_rules(selectors);
+
+        for rules in selector_rules.into_iter() {
+            for rule in rules.into_iter() {
+                map.insert(rule)
+            }
+        }
+
+        map
+    }
+
     #[test]
     fn test_rule_ordering_same_specificity(){
         let rules_list = get_mock_rules(&["a.intro", "img.sidebar"]);
@@ -854,6 +889,7 @@ mod tests {
         assert!((a.specificity, a.source_order) < ((b.specificity, b.source_order)),
                 "The rule that comes later should win.");
     }
+
 
     #[test]
     fn test_get_id_name(){
@@ -893,5 +929,15 @@ mod tests {
         selector_map.insert(rules_list[0][0].clone());
         assert_eq!(0, selector_map.class_hash.get(&Atom::from("intro")).unwrap()[0].declarations.source_order);
         assert!(selector_map.class_hash.get(&Atom::from("foo")).is_none());
+    }
+
+    #[test]
+    fn test_get_universal_rules(){
+        let map = get_mock_map(&["*|*", "#foo > *|*", ".klass", "#id"]);
+        let mut decls = vec![];
+
+        map.get_universal_rules(&mut decls);
+
+        assert_eq!(decls.len(), 1);
     }
 }
