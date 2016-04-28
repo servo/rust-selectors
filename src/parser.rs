@@ -460,7 +460,8 @@ fn parse_attribute_flags(input: &mut Parser) -> Result<CaseSensitivity, ()> {
 }
 
 
-/// Level 3: Parse **one** simple_selector
+/// Level 3: Parse **one** simple_selector.  (Though we might insert a second
+/// implied "<defaultns>|*" type selector.)
 fn parse_negation<Impl: SelectorImpl>(context: &ParserContext,
                                       input: &mut Parser)
                                       -> Result<SimpleSelector<Impl>, ()> {
@@ -471,7 +472,14 @@ fn parse_negation<Impl: SelectorImpl>(context: &ParserContext,
                                                  input,
                                                  /* inside_negation = */ true)) {
                 Some(SimpleSelectorParseResult::SimpleSelector(simple_selector)) => {
-                    Ok(SimpleSelector::Negation(vec![simple_selector]))
+                    let simple_selectors = match context.default_namespace {
+                        // If there was no explicit type selector, but there is
+                        // a default namespace, there is an implicit
+                        // "<defaultns>|*" type selector before simple_selector.
+                        Some(ref ns) => vec![SimpleSelector::Namespace(ns.clone()), simple_selector],
+                        None => vec![simple_selector],
+                    };
+                    Ok(SimpleSelector::Negation(simple_selectors))
                 }
                 _ => Err(())
             }
@@ -497,7 +505,15 @@ fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext,
     }
     let mut empty = true;
     let mut simple_selectors = match try!(parse_type_selector(context, input)) {
-        None => vec![],
+        None => {
+            match context.default_namespace {
+                // If there was no explicit type selector, but there is a
+                // default namespace, there is an implicit "<defaultns>|*" type
+                // selector.
+                Some(ref ns) => vec![SimpleSelector::Namespace(ns.clone())],
+                None => vec![],
+            }
+        }
         Some(s) => { empty = false; s }
     };
 
