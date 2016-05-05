@@ -338,8 +338,8 @@ pub fn matches<E>(selector_list: &[Selector<E::Impl>],
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
-/// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
-/// `main/css/matching.rs`.)
+/// will almost certainly break as elements will start mistakenly sharing styles. (See
+/// `can_share_style_with` in `servo/components/style/matching.rs`.)
 pub fn matches_compound_selector<E>(selector: &CompoundSelector<E::Impl>,
                                     element: &E,
                                     parent_bf: Option<&BloomFilter>,
@@ -555,7 +555,7 @@ pub enum CommonStyleAffectingAttributeMode {
     IsEqual(&'static str, CommonStyleAffectingAttributes),
 }
 
-// NB: This must match the order in `layout::css::matching::CommonStyleAffectingAttributes`.
+// NB: This must match the order in `selectors::matching::CommonStyleAffectingAttributes`.
 #[inline]
 pub fn common_style_affecting_attributes() -> [CommonStyleAffectingAttributeInfo; 5] {
     [
@@ -593,8 +593,8 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
-/// will almost certainly break as elements will start mistakenly sharing styles. (See the code in
-/// `main/css/matching.rs`.)
+/// will almost certainly break as elements will start mistakenly sharing styles. (See
+/// `can_share_style_with` in `servo/components/style/matching.rs`.)
 #[inline]
 pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
                                   element: &E,
