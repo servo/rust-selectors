@@ -11,7 +11,8 @@
 #[macro_use] extern crate cssparser;
 #[macro_use] extern crate matches;
 #[cfg(test)] extern crate rand;
-#[macro_use] extern crate string_cache;
+#[cfg(not(feature = "gecko_atom"))] #[macro_use] extern crate string_cache;
+#[cfg(feature = "gecko_atom")] #[macro_use] extern crate gecko_atom as string_cache;
 extern crate quickersort;
 extern crate smallvec;
 extern crate fnv;

@@ -25,6 +25,7 @@ string_cache = "0.2.13"
 quickersort = "2.0.0"
 heapsize = {version = ">=0.1.1, <0.4", features = ["unstable"], optional = true}
 heapsize_plugin = {version = "0.1.0", optional = true}
+gecko_atom = {version = "1.0.0", optional = true}
 
 [dev-dependencies]
 rand = "0.3"
