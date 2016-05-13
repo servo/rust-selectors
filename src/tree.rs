@@ -7,7 +7,7 @@
 
 use matching::ElementFlags;
 use parser::{AttrSelector, SelectorImpl};
-use string_cache::{Atom, Namespace};
+use string_cache::{Atom, BorrowedAtom, BorrowedNamespace};
 
 pub trait Element: Sized {
     type Impl: SelectorImpl;
@@ -27,8 +27,8 @@ pub trait Element: Sized {
     fn next_sibling_element(&self) -> Option<Self>;
 
     fn is_html_element_in_html_document(&self) -> bool;
-    fn get_local_name<'a>(&'a self) -> &'a Atom;
-    fn get_namespace<'a>(&'a self) -> &'a Namespace;
+    fn get_local_name<'a>(&'a self) -> BorrowedAtom<'a>;
+    fn get_namespace<'a>(&'a self) -> BorrowedNamespace<'a>;
 
     fn match_non_ts_pseudo_class(&self, pc: <Self::Impl as SelectorImpl>::NonTSPseudoClass) -> bool;
 
