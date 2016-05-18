@@ -112,7 +112,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         SelectorMap::get_matching_rules_from_hash(element,
                                                   parent_bf,
                                                   local_name_hash,
-                                                  element.get_local_name(),
+                                                  &element.get_local_name(),
                                                   matching_rules_list,
                                                   shareable);
 
@@ -604,10 +604,10 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
-            element.get_local_name() == name
+            element.get_local_name() == *name
         }
         SimpleSelector::Namespace(ref namespace) => {
-            element.get_namespace() == namespace
+            element.get_namespace() == *namespace
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
@@ -767,8 +767,8 @@ fn matches_generic_nth_child<E>(element: &E,
         };
 
         if is_of_type {
-            if element.get_local_name() == sibling.get_local_name() &&
-                element.get_namespace() == sibling.get_namespace() {
+            if element.get_local_name() == *sibling.get_local_name() &&
+                element.get_namespace() == *sibling.get_namespace() {
                 index += 1;
             }
         } else {
