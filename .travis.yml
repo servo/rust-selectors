@@ -5,7 +5,6 @@ rust:
     - stable
 script:
     - cargo test
-    - ([ $TRAVIS_RUST_VERSION == stable ] || cargo build --features gecko_atom)
     - ([ $TRAVIS_RUST_VERSION != nightly ] || cargo test --features unstable)
 
 branches:
