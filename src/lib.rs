@@ -10,7 +10,6 @@
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate cssparser;
 #[macro_use] extern crate matches;
-#[cfg(test)] extern crate rand;
 #[macro_use] extern crate string_cache;
 extern crate quickersort;
 extern crate smallvec;
