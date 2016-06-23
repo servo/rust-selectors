@@ -633,7 +633,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.match_attr(attr, |_| true)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
-            if *value != "DIR" &&
+            if *value != "dir" &&
                     common_style_affecting_attributes().iter().all(|common_attr_info| {
                         !(common_attr_info.atom == attr.name && match common_attr_info.mode {
                             CommonStyleAffectingAttributeMode::IsEqual(target_value, _) => *value == target_value,
