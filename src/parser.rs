@@ -99,7 +99,7 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
     AttrExists(AttrSelector),  // [foo]
     AttrEqual(AttrSelector, String, CaseSensitivity),  // [foo=bar]
     AttrIncludes(AttrSelector, String),  // [foo~=bar]
-    AttrDashMatch(AttrSelector, String, String), // [foo|=bar]  Second string is the first + "-"
+    AttrDashMatch(AttrSelector, String), // [foo|=bar]
     AttrPrefixMatch(AttrSelector, String),  // [foo^=bar]
     AttrSubstringMatch(AttrSelector, String),  // [foo*=bar]
     AttrSuffixMatch(AttrSelector, String),  // [foo$=bar]
@@ -429,8 +429,7 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext, input: 
         // [foo|=bar]
         Ok(Token::DashMatch) => {
             let value = try!(parse_value(input));
-            let dashing_value = format!("{}-", value);
-            Ok(SimpleSelector::AttrDashMatch(attr, value, dashing_value))
+            Ok(SimpleSelector::AttrDashMatch(attr, value))
         }
         // [foo^=bar]
         Ok(Token::PrefixMatch) => {
@@ -847,7 +846,7 @@ pub mod tests {
                         name: Atom::from("attr"),
                         lower_name: Atom::from("attr"),
                         namespace: NamespaceConstraint::Specific(ns!()),
-                    }, "foo".to_owned(), "foo-".to_owned())
+                    }, "foo".to_owned())
                 ],
                 next: None,
             }),
