@@ -10,7 +10,7 @@ use quickersort::sort_by;
 use string_cache::Atom;
 
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
-use parser::{SimpleSelector, Selector, SelectorImpl};
+use parser::{MaybeAtom, SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 use HashMap;
 
@@ -74,7 +74,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                         parent_bf: Option<&BloomFilter>,
                                         matching_rules_list: &mut V,
                                         shareable: &mut bool)
-                                        where E: Element<Impl=Impl>,
+                                        where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
                                               V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
@@ -149,7 +149,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                           key: &Atom,
                                           matching_rules: &mut V,
                                           shareable: &mut bool)
-                                          where E: Element<Impl=Impl>,
+                                          where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
                                                 V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
@@ -169,7 +169,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                 rules: &[Rule<T, Impl>],
                                 matching_rules: &mut V,
                                 shareable: &mut bool)
-                                where E: Element<Impl=Impl>,
+                                where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
                                       V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {
@@ -629,10 +629,10 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.match_attr_has(attr)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
-            if *value != "dir" &&
+            if !value.equals_atom(&atom!("dir")) &&
                     common_style_affecting_attributes().iter().all(|common_attr_info| {
                         !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                            CommonStyleAffectingAttributeMode::IsEqual(ref target_value, _) => *value == &**target_value,
+                            CommonStyleAffectingAttributeMode::IsEqual(ref target_value, _) => value.equals_atom(target_value),
                             CommonStyleAffectingAttributeMode::IsPresent(_) => false,
                         })
                     }) {
