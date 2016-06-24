@@ -545,10 +545,10 @@ pub struct CommonStyleAffectingAttributeInfo {
     pub mode: CommonStyleAffectingAttributeMode,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub enum CommonStyleAffectingAttributeMode {
     IsPresent(CommonStyleAffectingAttributes),
-    IsEqual(&'static str, CommonStyleAffectingAttributes),
+    IsEqual(Atom, CommonStyleAffectingAttributes),
 }
 
 // NB: This must match the order in `selectors::matching::CommonStyleAffectingAttributes`.
@@ -565,15 +565,15 @@ pub fn common_style_affecting_attributes() -> [CommonStyleAffectingAttributeInfo
         },
         CommonStyleAffectingAttributeInfo {
             atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("left", ALIGN_LEFT_ATTRIBUTE),
+            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("left"), ALIGN_LEFT_ATTRIBUTE),
         },
         CommonStyleAffectingAttributeInfo {
             atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("center", ALIGN_CENTER_ATTRIBUTE),
+            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("center"), ALIGN_CENTER_ATTRIBUTE),
         },
         CommonStyleAffectingAttributeInfo {
             atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("right", ALIGN_RIGHT_ATTRIBUTE),
+            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("right"), ALIGN_RIGHT_ATTRIBUTE),
         }
     ]
 }
@@ -632,7 +632,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             if *value != "dir" &&
                     common_style_affecting_attributes().iter().all(|common_attr_info| {
                         !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                            CommonStyleAffectingAttributeMode::IsEqual(target_value, _) => *value == target_value,
+                            CommonStyleAffectingAttributeMode::IsEqual(ref target_value, _) => *value == &**target_value,
                             CommonStyleAffectingAttributeMode::IsPresent(_) => false,
                         })
                     }) {
