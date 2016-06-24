@@ -20,7 +20,7 @@ pub trait MatchAttr {
     fn match_attr_equals(&self, attr: &AttrSelector, value: &str) -> bool;
     fn match_attr_equals_ignore_case(&self, attr: &AttrSelector, value: &str) -> bool;
     fn match_attr_includes(&self, attr: &AttrSelector, value: &str) -> bool;
-    fn match_attr_dash(&self, attr: &AttrSelector, value: &str, dashing_value: &str) -> bool;
+    fn match_attr_dash(&self, attr: &AttrSelector, value: &str) -> bool;
     fn match_attr_prefix(&self, attr: &AttrSelector, value: &str) -> bool;
     fn match_attr_substring(&self, attr: &AttrSelector, value: &str) -> bool;
     fn match_attr_suffix(&self, attr: &AttrSelector, value: &str) -> bool;
@@ -45,10 +45,21 @@ impl<T> MatchAttr for T where T: MatchAttrGeneric {
             attr_value.split(SELECTOR_WHITESPACE).any(|v| v == value)
         })
     }
-    fn match_attr_dash(&self, attr: &AttrSelector, value: &str, dashing_value: &str) -> bool {
+    fn match_attr_dash(&self, attr: &AttrSelector, value: &str) -> bool {
         self.match_attr(attr, |attr_value| {
-            attr_value == value ||
-            attr_value.starts_with(dashing_value)
+
+            // The attribute must start with the pattern.
+            if !attr_value.starts_with(value) {
+                return false
+            }
+
+            // If the strings are the same, we're done.
+            if attr_value.len() == value.len() {
+                return true
+            }
+
+            // The attribute is long than the pattern, so the next character must be '-'.
+            attr_value.as_bytes()[value.len()] == '-' as u8
         })
     }
     fn match_attr_prefix(&self, attr: &AttrSelector, value: &str) -> bool {

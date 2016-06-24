@@ -649,9 +649,9 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             *shareable = false;
             element.match_attr_includes(attr, value)
         }
-        SimpleSelector::AttrDashMatch(ref attr, ref value, ref dashing_value) => {
+        SimpleSelector::AttrDashMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr_dash(attr, value, dashing_value)
+            element.match_attr_dash(attr, value)
         }
         SimpleSelector::AttrPrefixMatch(ref attr, ref value) => {
             *shareable = false;
