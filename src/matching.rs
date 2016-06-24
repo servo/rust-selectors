@@ -1,7 +1,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-use std::ascii::AsciiExt;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -14,9 +13,6 @@ use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 use HashMap;
-
-/// The definition of whitespace per CSS Selectors Level 3 § 4.
-pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
 
 /// Map element data to Rules whose last simple selector starts with them.
 ///
@@ -630,7 +626,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             }) {
                 *shareable = false;
             }
-            element.match_attr(attr, |_| true)
+            element.match_attr_has(attr)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
             if *value != "dir" &&
@@ -644,43 +640,30 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
                 // here because the UA style otherwise disables all style sharing completely.
                 *shareable = false
             }
-            element.match_attr(attr, |attr_value| {
-                match case_sensitivity {
-                    CaseSensitivity::CaseSensitive => attr_value == *value,
-                    CaseSensitivity::CaseInsensitive => attr_value.eq_ignore_ascii_case(value),
-                }
-            })
+            match case_sensitivity {
+                CaseSensitivity::CaseSensitive => element.match_attr_equals(attr, value),
+                CaseSensitivity::CaseInsensitive => element.match_attr_equals_ignore_ascii_case(attr, value),
+            }
         }
         SimpleSelector::AttrIncludes(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.split(SELECTOR_WHITESPACE).any(|v| v == *value)
-            })
+            element.match_attr_includes(attr, value)
         }
         SimpleSelector::AttrDashMatch(ref attr, ref value, ref dashing_value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value == *value ||
-                attr_value.starts_with(dashing_value)
-            })
+            element.match_attr_dash(attr, value, dashing_value)
         }
         SimpleSelector::AttrPrefixMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.starts_with(value)
-            })
+            element.match_attr_prefix(attr, value)
         }
         SimpleSelector::AttrSubstringMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.contains(value)
-            })
+            element.match_attr_substring(attr, value)
         }
         SimpleSelector::AttrSuffixMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.ends_with(value)
-            })
+            element.match_attr_suffix(attr, value)
         }
         SimpleSelector::NonTSPseudoClass(ref pc) => {
             *shareable = false;
