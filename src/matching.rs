@@ -1,7 +1,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-use std::ascii::AsciiExt;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -11,12 +10,9 @@ use quickersort::sort_by;
 use string_cache::Atom;
 
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
-use parser::{SimpleSelector, Selector, SelectorImpl};
+use parser::{MaybeAtom, SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 use HashMap;
-
-/// The definition of whitespace per CSS Selectors Level 3 § 4.
-pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
 
 /// Map element data to Rules whose last simple selector starts with them.
 ///
@@ -78,7 +74,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                         parent_bf: Option<&BloomFilter>,
                                         matching_rules_list: &mut V,
                                         shareable: &mut bool)
-                                        where E: Element<Impl=Impl>,
+                                        where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
                                               V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
@@ -153,7 +149,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                           key: &Atom,
                                           matching_rules: &mut V,
                                           shareable: &mut bool)
-                                          where E: Element<Impl=Impl>,
+                                          where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
                                                 V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
@@ -173,7 +169,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                 rules: &[Rule<T, Impl>],
                                 matching_rules: &mut V,
                                 shareable: &mut bool)
-                                where E: Element<Impl=Impl>,
+                                where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
                                       V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {
@@ -549,10 +545,10 @@ pub struct CommonStyleAffectingAttributeInfo {
     pub mode: CommonStyleAffectingAttributeMode,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub enum CommonStyleAffectingAttributeMode {
     IsPresent(CommonStyleAffectingAttributes),
-    IsEqual(&'static str, CommonStyleAffectingAttributes),
+    IsEqual(Atom, CommonStyleAffectingAttributes),
 }
 
 // NB: This must match the order in `selectors::matching::CommonStyleAffectingAttributes`.
@@ -569,15 +565,15 @@ pub fn common_style_affecting_attributes() -> [CommonStyleAffectingAttributeInfo
         },
         CommonStyleAffectingAttributeInfo {
             atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("left", ALIGN_LEFT_ATTRIBUTE),
+            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("left"), ALIGN_LEFT_ATTRIBUTE),
         },
         CommonStyleAffectingAttributeInfo {
             atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("center", ALIGN_CENTER_ATTRIBUTE),
+            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("center"), ALIGN_CENTER_ATTRIBUTE),
         },
         CommonStyleAffectingAttributeInfo {
             atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual("right", ALIGN_RIGHT_ATTRIBUTE),
+            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("right"), ALIGN_RIGHT_ATTRIBUTE),
         }
     ]
 }
@@ -630,13 +626,13 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             }) {
                 *shareable = false;
             }
-            element.match_attr(attr, |_| true)
+            element.match_attr_has(attr)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
-            if *value != "DIR" &&
+            if !value.equals_atom(&atom!("dir")) &&
                     common_style_affecting_attributes().iter().all(|common_attr_info| {
                         !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                            CommonStyleAffectingAttributeMode::IsEqual(target_value, _) => *value == target_value,
+                            CommonStyleAffectingAttributeMode::IsEqual(ref target_value, _) => value.equals_atom(target_value),
                             CommonStyleAffectingAttributeMode::IsPresent(_) => false,
                         })
                     }) {
@@ -644,43 +640,30 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
                 // here because the UA style otherwise disables all style sharing completely.
                 *shareable = false
             }
-            element.match_attr(attr, |attr_value| {
-                match case_sensitivity {
-                    CaseSensitivity::CaseSensitive => attr_value == *value,
-                    CaseSensitivity::CaseInsensitive => attr_value.eq_ignore_ascii_case(value),
-                }
-            })
+            match case_sensitivity {
+                CaseSensitivity::CaseSensitive => element.match_attr_equals(attr, value),
+                CaseSensitivity::CaseInsensitive => element.match_attr_equals_ignore_ascii_case(attr, value),
+            }
         }
         SimpleSelector::AttrIncludes(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.split(SELECTOR_WHITESPACE).any(|v| v == *value)
-            })
+            element.match_attr_includes(attr, value)
         }
-        SimpleSelector::AttrDashMatch(ref attr, ref value, ref dashing_value) => {
+        SimpleSelector::AttrDashMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value == *value ||
-                attr_value.starts_with(dashing_value)
-            })
+            element.match_attr_dash(attr, value)
         }
         SimpleSelector::AttrPrefixMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.starts_with(value)
-            })
+            element.match_attr_prefix(attr, value)
         }
         SimpleSelector::AttrSubstringMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.contains(value)
-            })
+            element.match_attr_substring(attr, value)
         }
         SimpleSelector::AttrSuffixMatch(ref attr, ref value) => {
             *shareable = false;
-            element.match_attr(attr, |attr_value| {
-                attr_value.ends_with(value)
-            })
+            element.match_attr_suffix(attr, value)
         }
         SimpleSelector::NonTSPseudoClass(ref pc) => {
             *shareable = false;

@@ -16,9 +16,52 @@ use string_cache::{Atom, Namespace};
 
 use HashMap;
 
+// The MaybeAtom trait allows consumers to decide whether to store attribute
+// selector strings as atoms or raw strings. Gecko uses atoms to get around
+// UTF-16 issues, whereas Servo uses strings to avoid mostly-unnecessary
+// atomization costs.
+#[cfg(feature = "heap_size")]
+pub trait MaybeAtom: Clone + Debug + HeapSizeOf + PartialEq {
+    fn equals_atom(&self, other: &Atom) -> bool;
+    fn from_cow_str(cow: Cow<str>) -> Self;
+}
+
+#[cfg(not(feature = "heap_size"))]
+pub trait MaybeAtom: Clone + Debug + PartialEq {
+    fn equals_atom(&self, other: &Atom) -> bool;
+    fn from_cow_str(cow: Cow<str>) -> Self;
+}
+
+impl MaybeAtom for String {
+    #[cfg(not(feature = "gecko"))]
+    fn equals_atom(&self, other: &Atom) -> bool {
+        self == &**other
+    }
+    #[cfg(feature = "gecko")]
+    fn equals_atom(&self, _: &Atom) -> bool {
+        // We could implement this with a smart UTF-8/UTF-16 comparator over
+        // FFI, but we don't need it since we use Atoms for Gecko.
+        unimplemented!()
+    }
+    fn from_cow_str(cow: Cow<str>) -> Self {
+        cow.into_owned()
+    }
+}
+
+impl MaybeAtom for Atom {
+    fn equals_atom(&self, other: &Atom) -> bool {
+        self == other
+    }
+    fn from_cow_str(cow: Cow<str>) -> Self {
+        Atom::from(cow)
+    }
+}
+
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
 pub trait SelectorImpl {
+    type AttrString: MaybeAtom;
+
     /// non tree-structural pseudo-classes
     /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
     #[cfg(feature = "heap_size")]
@@ -97,12 +140,12 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
 
     // Attribute selectors
     AttrExists(AttrSelector),  // [foo]
-    AttrEqual(AttrSelector, String, CaseSensitivity),  // [foo=bar]
-    AttrIncludes(AttrSelector, String),  // [foo~=bar]
-    AttrDashMatch(AttrSelector, String, String), // [foo|=bar]  Second string is the first + "-"
-    AttrPrefixMatch(AttrSelector, String),  // [foo^=bar]
-    AttrSubstringMatch(AttrSelector, String),  // [foo*=bar]
-    AttrSuffixMatch(AttrSelector, String),  // [foo$=bar]
+    AttrEqual(AttrSelector, Impl::AttrString, CaseSensitivity),  // [foo=bar]
+    AttrIncludes(AttrSelector, Impl::AttrString),  // [foo~=bar]
+    AttrDashMatch(AttrSelector, Impl::AttrString), // [foo|=bar]
+    AttrPrefixMatch(AttrSelector, Impl::AttrString),  // [foo^=bar]
+    AttrSubstringMatch(AttrSelector, Impl::AttrString),  // [foo*=bar]
+    AttrSuffixMatch(AttrSelector, Impl::AttrString),  // [foo$=bar]
 
     // Pseudo-classes
     Negation(Vec<SimpleSelector<Impl>>),
@@ -409,8 +452,8 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext, input: 
         },
     };
 
-    fn parse_value(input: &mut Parser) -> Result<String, ()> {
-        Ok((try!(input.expect_ident_or_string())).into_owned())
+    fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrString, ()> {
+        Ok(Impl::AttrString::from_cow_str(try!(input.expect_ident_or_string())))
     }
     // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
@@ -419,30 +462,29 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext, input: 
 
         // [foo=bar]
         Ok(Token::Delim('=')) => {
-            Ok(SimpleSelector::AttrEqual(attr, try!(parse_value(input)),
+            Ok(SimpleSelector::AttrEqual(attr, try!(parse_value::<Impl>(input)),
                                          try!(parse_attribute_flags(input))))
         }
         // [foo~=bar]
         Ok(Token::IncludeMatch) => {
-            Ok(SimpleSelector::AttrIncludes(attr, try!(parse_value(input))))
+            Ok(SimpleSelector::AttrIncludes(attr, try!(parse_value::<Impl>(input))))
         }
         // [foo|=bar]
         Ok(Token::DashMatch) => {
-            let value = try!(parse_value(input));
-            let dashing_value = format!("{}-", value);
-            Ok(SimpleSelector::AttrDashMatch(attr, value, dashing_value))
+            let value = try!(parse_value::<Impl>(input));
+            Ok(SimpleSelector::AttrDashMatch(attr, value))
         }
         // [foo^=bar]
         Ok(Token::PrefixMatch) => {
-            Ok(SimpleSelector::AttrPrefixMatch(attr, try!(parse_value(input))))
+            Ok(SimpleSelector::AttrPrefixMatch(attr, try!(parse_value::<Impl>(input))))
         }
         // [foo*=bar]
         Ok(Token::SubstringMatch) => {
-            Ok(SimpleSelector::AttrSubstringMatch(attr, try!(parse_value(input))))
+            Ok(SimpleSelector::AttrSubstringMatch(attr, try!(parse_value::<Impl>(input))))
         }
         // [foo$=bar]
         Ok(Token::SuffixMatch) => {
-            Ok(SimpleSelector::AttrSuffixMatch(attr, try!(parse_value(input))))
+            Ok(SimpleSelector::AttrSuffixMatch(attr, try!(parse_value::<Impl>(input))))
         }
         _ => Err(())
     }
@@ -681,6 +723,7 @@ pub mod tests {
     pub struct DummySelectorImpl;
 
     impl SelectorImpl for DummySelectorImpl {
+        type AttrString = String;
         type NonTSPseudoClass = PseudoClass;
         fn parse_non_ts_pseudo_class(context: &ParserContext, name: &str) -> Result<PseudoClass, ()> {
             match_ignore_ascii_case! { name,
@@ -847,7 +890,7 @@ pub mod tests {
                         name: Atom::from("attr"),
                         lower_name: Atom::from("attr"),
                         namespace: NamespaceConstraint::Specific(ns!()),
-                    }, "foo".to_owned(), "foo-".to_owned())
+                    }, "foo".to_owned())
                 ],
                 next: None,
             }),
