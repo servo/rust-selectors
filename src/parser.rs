@@ -27,30 +27,16 @@ use HashMap;
 // UTF-16 issues, whereas Servo uses strings to avoid mostly-unnecessary
 // atomization costs.
 pub trait MaybeAtom: Clone + Debug + MaybeHeapSizeOf + PartialEq {
-    fn equals_atom(&self, other: &Atom) -> bool;
     fn from_cow_str(cow: Cow<str>) -> Self;
 }
 
 impl MaybeAtom for String {
-    #[cfg(not(feature = "gecko"))]
-    fn equals_atom(&self, other: &Atom) -> bool {
-        self == &**other
-    }
-    #[cfg(feature = "gecko")]
-    fn equals_atom(&self, _: &Atom) -> bool {
-        // We could implement this with a smart UTF-8/UTF-16 comparator over
-        // FFI, but we don't need it since we use Atoms for Gecko.
-        unimplemented!()
-    }
     fn from_cow_str(cow: Cow<str>) -> Self {
         cow.into_owned()
     }
 }
 
 impl MaybeAtom for Atom {
-    fn equals_atom(&self, other: &Atom) -> bool {
-        self == other
-    }
     fn from_cow_str(cow: Cow<str>) -> Self {
         Atom::from(cow)
     }
@@ -60,6 +46,15 @@ impl MaybeAtom for Atom {
 /// of pseudo-classes/elements
 pub trait SelectorImpl {
     type AttrString: MaybeAtom;
+
+    fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector) -> bool {
+        false
+    }
+
+    fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector,
+                                         _value: &Self::AttrString) -> bool {
+        false
+    }
 
     /// non tree-structural pseudo-classes
     /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)

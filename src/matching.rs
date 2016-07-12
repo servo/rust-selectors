@@ -10,7 +10,7 @@ use quickersort::sort_by;
 use string_cache::Atom;
 
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
-use parser::{MaybeAtom, SimpleSelector, Selector, SelectorImpl};
+use parser::{SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 use HashMap;
 
@@ -530,54 +530,6 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
     }
 }
 
-bitflags! {
-    pub flags CommonStyleAffectingAttributes: u8 {
-        const HIDDEN_ATTRIBUTE = 0x01,
-        const NO_WRAP_ATTRIBUTE = 0x02,
-        const ALIGN_LEFT_ATTRIBUTE = 0x04,
-        const ALIGN_CENTER_ATTRIBUTE = 0x08,
-        const ALIGN_RIGHT_ATTRIBUTE = 0x10,
-    }
-}
-
-pub struct CommonStyleAffectingAttributeInfo {
-    pub atom: Atom,
-    pub mode: CommonStyleAffectingAttributeMode,
-}
-
-#[derive(Clone)]
-pub enum CommonStyleAffectingAttributeMode {
-    IsPresent(CommonStyleAffectingAttributes),
-    IsEqual(Atom, CommonStyleAffectingAttributes),
-}
-
-// NB: This must match the order in `selectors::matching::CommonStyleAffectingAttributes`.
-#[inline]
-pub fn common_style_affecting_attributes() -> [CommonStyleAffectingAttributeInfo; 5] {
-    [
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("hidden"),
-            mode: CommonStyleAffectingAttributeMode::IsPresent(HIDDEN_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("nowrap"),
-            mode: CommonStyleAffectingAttributeMode::IsPresent(NO_WRAP_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("left"), ALIGN_LEFT_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("center"), ALIGN_CENTER_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("right"), ALIGN_RIGHT_ATTRIBUTE),
-        }
-    ]
-}
-
 /// Determines whether the given element matches the given single selector.
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
@@ -609,28 +561,13 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.has_class(class)
         }
         SimpleSelector::AttrExists(ref attr) => {
-            // NB(pcwalton): If you update this, remember to update the corresponding list in
-            // `can_share_style_with()` as well.
-            if common_style_affecting_attributes().iter().all(|common_attr_info| {
-                !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                    CommonStyleAffectingAttributeMode::IsPresent(_) => true,
-                    CommonStyleAffectingAttributeMode::IsEqual(..) => false,
-                })
-            }) {
+            if E::Impl::attr_exists_selector_is_shareable(attr) {
                 *shareable = false;
             }
             element.match_attr_has(attr)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
-            if !value.equals_atom(&atom!("dir")) &&
-                    common_style_affecting_attributes().iter().all(|common_attr_info| {
-                        !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                            CommonStyleAffectingAttributeMode::IsEqual(ref target_value, _) => value.equals_atom(target_value),
-                            CommonStyleAffectingAttributeMode::IsPresent(_) => false,
-                        })
-                    }) {
-                // FIXME(pcwalton): Remove once we start actually supporting RTL text. This is in
-                // here because the UA style otherwise disables all style sharing completely.
+            if E::Impl::attr_equals_selector_is_shareable(attr, value) {
                 *shareable = false
             }
             match case_sensitivity {

@@ -12,7 +12,6 @@ keywords = ["css", "selectors"]
 license = "MPL-2.0"
 
 [features]
-gecko = []
 unstable = ["string_cache/unstable"]
 heap_size = ["string_cache/heap_size", "heapsize", "heapsize_plugin"]
 
