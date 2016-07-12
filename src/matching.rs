@@ -74,7 +74,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                         parent_bf: Option<&BloomFilter>,
                                         matching_rules_list: &mut V,
                                         shareable: &mut bool)
-                                        where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
+                                        where E: Element<Impl=Impl, AttrValue=Impl::AttrValue>,
                                               V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
@@ -149,7 +149,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                           key: &Atom,
                                           matching_rules: &mut V,
                                           shareable: &mut bool)
-                                          where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
+                                          where E: Element<Impl=Impl, AttrValue=Impl::AttrValue>,
                                                 V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
@@ -169,7 +169,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                 rules: &[Rule<T, Impl>],
                                 matching_rules: &mut V,
                                 shareable: &mut bool)
-                                where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
+                                where E: Element<Impl=Impl, AttrValue=Impl::AttrValue>,
                                       V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {

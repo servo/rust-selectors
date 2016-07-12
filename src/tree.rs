@@ -17,15 +17,15 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 // Attribute matching routines. Consumers with simple implementations can implement
 // MatchAttrGeneric instead.
 pub trait MatchAttr {
-    type AttrString: Clone + Debug + MaybeHeapSizeOf + PartialEq;
+    type AttrValue: Clone + Debug + MaybeHeapSizeOf + PartialEq;
     fn match_attr_has(&self, attr: &AttrSelector) -> bool;
-    fn match_attr_equals(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
-    fn match_attr_equals_ignore_ascii_case(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
-    fn match_attr_includes(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
-    fn match_attr_dash(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
-    fn match_attr_prefix(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
-    fn match_attr_substring(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
-    fn match_attr_suffix(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
+    fn match_attr_equals(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
+    fn match_attr_equals_ignore_ascii_case(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
+    fn match_attr_includes(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
+    fn match_attr_dash(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
+    fn match_attr_prefix(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
+    fn match_attr_substring(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
+    fn match_attr_suffix(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
 }
 
 pub trait MatchAttrGeneric {
@@ -33,7 +33,7 @@ pub trait MatchAttrGeneric {
 }
 
 impl<T> MatchAttr for T where T: MatchAttrGeneric {
-    type AttrString = String;
+    type AttrValue = String;
     fn match_attr_has(&self, attr: &AttrSelector) -> bool {
         self.match_attr(attr, |_| true)
     }
@@ -83,7 +83,7 @@ impl<T> MatchAttr for T where T: MatchAttrGeneric {
 }
 
 pub trait Element: MatchAttr + Sized {
-    type Impl: SelectorImpl<AttrString = <Self as MatchAttr>::AttrString>;
+    type Impl: SelectorImpl<AttrValue = <Self as MatchAttr>::AttrValue>;
 
     fn parent_element(&self) -> Option<Self>;
 

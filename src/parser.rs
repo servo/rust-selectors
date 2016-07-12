@@ -25,16 +25,17 @@ use HashMap;
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
 pub trait SelectorImpl {
-    type AttrString: Clone + Debug + MaybeHeapSizeOf + PartialEq;
+    type AttrValue: Clone + Debug + MaybeHeapSizeOf + PartialEq;
 
-    fn attr_string_from_cow_str(s: Cow<str>) -> Self::AttrString;
+    /// Although it could, String does not implement From<Cow<str>>
+    fn attr_value_from_cow_str(s: Cow<str>) -> Self::AttrValue;
 
     fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector) -> bool {
         false
     }
 
     fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector,
-                                         _value: &Self::AttrString) -> bool {
+                                         _value: &Self::AttrValue) -> bool {
         false
     }
 
@@ -110,12 +111,12 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
 
     // Attribute selectors
     AttrExists(AttrSelector),  // [foo]
-    AttrEqual(AttrSelector, Impl::AttrString, CaseSensitivity),  // [foo=bar]
-    AttrIncludes(AttrSelector, Impl::AttrString),  // [foo~=bar]
-    AttrDashMatch(AttrSelector, Impl::AttrString), // [foo|=bar]
-    AttrPrefixMatch(AttrSelector, Impl::AttrString),  // [foo^=bar]
-    AttrSubstringMatch(AttrSelector, Impl::AttrString),  // [foo*=bar]
-    AttrSuffixMatch(AttrSelector, Impl::AttrString),  // [foo$=bar]
+    AttrEqual(AttrSelector, Impl::AttrValue, CaseSensitivity),  // [foo=bar]
+    AttrIncludes(AttrSelector, Impl::AttrValue),  // [foo~=bar]
+    AttrDashMatch(AttrSelector, Impl::AttrValue), // [foo|=bar]
+    AttrPrefixMatch(AttrSelector, Impl::AttrValue),  // [foo^=bar]
+    AttrSubstringMatch(AttrSelector, Impl::AttrValue),  // [foo*=bar]
+    AttrSuffixMatch(AttrSelector, Impl::AttrValue),  // [foo$=bar]
 
     // Pseudo-classes
     Negation(Vec<SimpleSelector<Impl>>),
@@ -422,8 +423,8 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext, input: 
         },
     };
 
-    fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrString, ()> {
-        Ok(Impl::attr_string_from_cow_str(try!(input.expect_ident_or_string())))
+    fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrValue, ()> {
+        Ok(Impl::attr_value_from_cow_str(try!(input.expect_ident_or_string())))
     }
     // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
@@ -694,10 +695,10 @@ pub mod tests {
     pub struct DummySelectorImpl;
 
     impl SelectorImpl for DummySelectorImpl {
-        type AttrString = String;
+        type AttrValue = String;
         type NonTSPseudoClass = PseudoClass;
 
-        fn attr_string_from_cow_str(s: Cow<str>) -> String {
+        fn attr_value_from_cow_str(s: Cow<str>) -> String {
             s.into_owned()
         }
 
