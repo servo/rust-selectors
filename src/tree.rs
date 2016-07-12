@@ -6,8 +6,9 @@
 //! style.
 
 use matching::ElementFlags;
-use parser::{AttrSelector, MaybeAtom, SelectorImpl};
+use parser::{AttrSelector, MaybeHeapSizeOf, SelectorImpl};
 use std::ascii::AsciiExt;
+use std::fmt::Debug;
 use string_cache::{Atom, BorrowedAtom, BorrowedNamespace};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
@@ -16,7 +17,7 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 // Attribute matching routines. Consumers with simple implementations can implement
 // MatchAttrGeneric instead.
 pub trait MatchAttr {
-    type AttrString: MaybeAtom;
+    type AttrString: Clone + Debug + MaybeHeapSizeOf + PartialEq;
     fn match_attr_has(&self, attr: &AttrSelector) -> bool;
     fn match_attr_equals(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;
     fn match_attr_equals_ignore_ascii_case(&self, attr: &AttrSelector, value: &Self::AttrString) -> bool;

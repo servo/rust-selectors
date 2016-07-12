@@ -22,30 +22,12 @@ use HashMap;
 #[cfg(not(feature = "heap_size"))] pub trait MaybeHeapSizeOf {}
 #[cfg(not(feature = "heap_size"))] impl<T> MaybeHeapSizeOf for T {}
 
-// The MaybeAtom trait allows consumers to decide whether to store attribute
-// selector strings as atoms or raw strings. Gecko uses atoms to get around
-// UTF-16 issues, whereas Servo uses strings to avoid mostly-unnecessary
-// atomization costs.
-pub trait MaybeAtom: Clone + Debug + MaybeHeapSizeOf + PartialEq {
-    fn from_cow_str(cow: Cow<str>) -> Self;
-}
-
-impl MaybeAtom for String {
-    fn from_cow_str(cow: Cow<str>) -> Self {
-        cow.into_owned()
-    }
-}
-
-impl MaybeAtom for Atom {
-    fn from_cow_str(cow: Cow<str>) -> Self {
-        Atom::from(cow)
-    }
-}
-
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
 pub trait SelectorImpl {
-    type AttrString: MaybeAtom;
+    type AttrString: Clone + Debug + MaybeHeapSizeOf + PartialEq;
+
+    fn attr_string_from_cow_str(s: Cow<str>) -> Self::AttrString;
 
     fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector) -> bool {
         false
@@ -441,7 +423,7 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext, input: 
     };
 
     fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrString, ()> {
-        Ok(Impl::AttrString::from_cow_str(try!(input.expect_ident_or_string())))
+        Ok(Impl::attr_string_from_cow_str(try!(input.expect_ident_or_string())))
     }
     // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
@@ -690,6 +672,7 @@ fn parse_simple_pseudo_class<Impl: SelectorImpl>(context: &ParserContext, name: 
 // NB: pub module in order to access the DummySelectorImpl
 #[cfg(test)]
 pub mod tests {
+    use std::borrow::Cow;
     use std::sync::Arc;
     use cssparser::Parser;
     use string_cache::Atom;
@@ -713,6 +696,11 @@ pub mod tests {
     impl SelectorImpl for DummySelectorImpl {
         type AttrString = String;
         type NonTSPseudoClass = PseudoClass;
+
+        fn attr_string_from_cow_str(s: Cow<str>) -> String {
+            s.into_owned()
+        }
+
         fn parse_non_ts_pseudo_class(context: &ParserContext, name: &str) -> Result<PseudoClass, ()> {
             match_ignore_ascii_case! { name,
                 "-servo-nonzero-border" => {
