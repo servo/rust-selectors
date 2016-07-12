@@ -8,26 +8,25 @@ use std::cmp;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
-#[cfg(feature = "heap_size")]
-use heapsize::HeapSizeOf;
 
 use cssparser::{Token, Parser, parse_nth};
 use string_cache::{Atom, Namespace};
 
 use HashMap;
 
+/// An empty trait that requires `HeapSizeOf` if the `heap_size` Cargo feature is enabled.
+#[cfg(feature = "heap_size")] pub trait MaybeHeapSizeOf: ::heapsize::HeapSizeOf {}
+#[cfg(feature = "heap_size")] impl<T: ::heapsize::HeapSizeOf> MaybeHeapSizeOf for T {}
+
+/// An empty trait that requires `HeapSizeOf` if the `heap_size` Cargo feature is enabled.
+#[cfg(not(feature = "heap_size"))] pub trait MaybeHeapSizeOf {}
+#[cfg(not(feature = "heap_size"))] impl<T> MaybeHeapSizeOf for T {}
+
 // The MaybeAtom trait allows consumers to decide whether to store attribute
 // selector strings as atoms or raw strings. Gecko uses atoms to get around
 // UTF-16 issues, whereas Servo uses strings to avoid mostly-unnecessary
 // atomization costs.
-#[cfg(feature = "heap_size")]
-pub trait MaybeAtom: Clone + Debug + HeapSizeOf + PartialEq {
-    fn equals_atom(&self, other: &Atom) -> bool;
-    fn from_cow_str(cow: Cow<str>) -> Self;
-}
-
-#[cfg(not(feature = "heap_size"))]
-pub trait MaybeAtom: Clone + Debug + PartialEq {
+pub trait MaybeAtom: Clone + Debug + MaybeHeapSizeOf + PartialEq {
     fn equals_atom(&self, other: &Atom) -> bool;
     fn from_cow_str(cow: Cow<str>) -> Self;
 }
@@ -64,10 +63,7 @@ pub trait SelectorImpl {
 
     /// non tree-structural pseudo-classes
     /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
-    #[cfg(feature = "heap_size")]
-    type NonTSPseudoClass: Sized + PartialEq + Clone + Debug + HeapSizeOf;
-    #[cfg(not(feature = "heap_size"))]
-    type NonTSPseudoClass: Sized + PartialEq + Clone + Debug;
+    type NonTSPseudoClass: Sized + PartialEq + Clone + Debug + MaybeHeapSizeOf;
 
     /// This function can return an "Err" pseudo-element in order to support CSS2.1
     /// pseudo-elements.
@@ -81,10 +77,7 @@ pub trait SelectorImpl {
         -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
 
     /// pseudo-elements
-    #[cfg(feature = "heap_size")]
-    type PseudoElement: Sized + PartialEq + Eq + Clone + Debug + Hash + HeapSizeOf;
-    #[cfg(not(feature = "heap_size"))]
-    type PseudoElement: Sized + PartialEq + Eq + Clone + Debug + Hash;
+    type PseudoElement: Sized + PartialEq + Eq + Clone + Debug + Hash + MaybeHeapSizeOf;
     fn parse_pseudo_element(_context: &ParserContext,
                             _name: &str)
         -> Result<Self::PseudoElement, ()> { Err(()) }
