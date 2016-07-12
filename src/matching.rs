@@ -578,13 +578,6 @@ pub fn common_style_affecting_attributes() -> [CommonStyleAffectingAttributeInfo
     ]
 }
 
-/// Attributes that, if present, disable style sharing. All legacy HTML attributes must be in
-/// either this list or `common_style_affecting_attributes`. See the comment in
-/// `synthesize_presentational_hints_for_legacy_attributes`.
-pub fn rare_style_affecting_attributes() -> [Atom; 3] {
-    [ atom!("bgcolor"), atom!("border"), atom!("colspan") ]
-}
-
 /// Determines whether the given element matches the given single selector.
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
