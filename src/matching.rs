@@ -7,7 +7,7 @@ use std::sync::Arc;
 use bloom::BloomFilter;
 use smallvec::VecLike;
 use quickersort::sort_by;
-use string_cache::Atom;
+use string_cache::{self, Atom};
 
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
@@ -548,7 +548,8 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.get_local_name() == *name
         }
         SimpleSelector::Namespace(ref namespace) => {
-            element.get_namespace() == *namespace
+            // UFCS to work around https://github.com/rust-lang/rust/issues/34792
+            PartialEq::<string_cache::Namespace>::eq(&element.get_namespace(), namespace)
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
@@ -681,7 +682,7 @@ fn matches_generic_nth_child<E>(element: &E,
 
         if is_of_type {
             if element.get_local_name() == *sibling.get_local_name() &&
-                element.get_namespace() == *sibling.get_namespace() {
+                element.get_namespace() == sibling.get_namespace() {
                 index += 1;
             }
         } else {

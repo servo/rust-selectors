@@ -6,10 +6,10 @@
 //! style.
 
 use matching::ElementFlags;
-use parser::{AttrSelector, MaybeHeapSizeOf, SelectorImpl};
+use parser::{AttrSelector, MaybeHeapSizeOf, SelectorImpl, TypeConstructor};
 use std::ascii::AsciiExt;
 use std::fmt::Debug;
-use string_cache::{Atom, BorrowedAtom, BorrowedNamespace};
+use string_cache::{Atom, BorrowedAtom};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -101,7 +101,7 @@ pub trait Element: MatchAttr + Sized {
 
     fn is_html_element_in_html_document(&self) -> bool;
     fn get_local_name<'a>(&'a self) -> BorrowedAtom<'a>;
-    fn get_namespace<'a>(&'a self) -> BorrowedNamespace<'a>;
+    fn get_namespace<'a>(&'a self) -> <Self::Impl as TypeConstructor<'a>>::BorrowedNamespace;
 
     fn match_non_ts_pseudo_class(&self, pc: <Self::Impl as SelectorImpl>::NonTSPseudoClass) -> bool;
 

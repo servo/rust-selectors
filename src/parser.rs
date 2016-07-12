@@ -10,7 +10,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use cssparser::{Token, Parser, parse_nth};
-use string_cache::{Atom, Namespace};
+use string_cache::{self, Atom, Namespace};
 
 use HashMap;
 
@@ -22,9 +22,14 @@ use HashMap;
 #[cfg(not(feature = "heap_size"))] pub trait MaybeHeapSizeOf {}
 #[cfg(not(feature = "heap_size"))] impl<T> MaybeHeapSizeOf for T {}
 
+pub trait TypeConstructor<'a> {
+    type BorrowedNamespace: PartialEq<string_cache::Namespace> + PartialEq;
+}
+
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
-pub trait SelectorImpl {
+pub trait SelectorImpl
+where Self: for<'a> TypeConstructor<'a> {
     type AttrValue: Clone + Debug + MaybeHeapSizeOf + PartialEq;
 
     /// Although it could, String does not implement From<Cow<str>>
@@ -676,7 +681,7 @@ pub mod tests {
     use std::borrow::Cow;
     use std::sync::Arc;
     use cssparser::Parser;
-    use string_cache::Atom;
+    use string_cache::{self, Atom};
     use super::*;
 
     #[derive(PartialEq, Clone, Debug)]
@@ -693,6 +698,10 @@ pub mod tests {
 
     #[derive(PartialEq, Debug)]
     pub struct DummySelectorImpl;
+
+    impl<'a> TypeConstructor<'a> for DummySelectorImpl {
+        type BorrowedNamespace = string_cache::BorrowedNamespace<'a>;
+    }
 
     impl SelectorImpl for DummySelectorImpl {
         type AttrValue = String;
