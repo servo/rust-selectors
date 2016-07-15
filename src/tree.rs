@@ -6,9 +6,8 @@
 //! style.
 
 use matching::ElementFlags;
-use parser::{AttrSelector, MaybeHeapSizeOf, SelectorImpl, TypeConstructor};
+use parser::{AttrSelector, SelectorImpl, TypeConstructor};
 use std::ascii::AsciiExt;
-use std::fmt::Debug;
 use string_cache::{Atom, BorrowedAtom};
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
@@ -17,38 +16,76 @@ pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C
 // Attribute matching routines. Consumers with simple implementations can implement
 // MatchAttrGeneric instead.
 pub trait MatchAttr {
-    type AttrValue: Clone + Debug + MaybeHeapSizeOf + PartialEq;
-    fn match_attr_has(&self, attr: &AttrSelector) -> bool;
-    fn match_attr_equals(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
-    fn match_attr_equals_ignore_ascii_case(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
-    fn match_attr_includes(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
-    fn match_attr_dash(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
-    fn match_attr_prefix(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
-    fn match_attr_substring(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
-    fn match_attr_suffix(&self, attr: &AttrSelector, value: &Self::AttrValue) -> bool;
+    type Impl: SelectorImpl;
+
+    fn match_attr_has(
+        &self,
+        attr: &AttrSelector<Self::Impl>) -> bool;
+
+    fn match_attr_equals(
+        &self,
+        attr: &AttrSelector<Self::Impl>,
+        value: &<Self::Impl as SelectorImpl>::AttrValue) -> bool;
+
+    fn match_attr_equals_ignore_ascii_case(
+        &self,
+        attr: &AttrSelector<Self::Impl>,
+        value: &<Self::Impl as SelectorImpl>::AttrValue) -> bool;
+
+    fn match_attr_includes(
+        &self,
+        attr: &AttrSelector<Self::Impl>,
+        value: &<Self::Impl as SelectorImpl>::AttrValue) -> bool;
+
+    fn match_attr_dash(
+        &self,
+        attr: &AttrSelector<Self::Impl>,
+        value: &<Self::Impl as SelectorImpl>::AttrValue) -> bool;
+
+    fn match_attr_prefix(
+        &self,
+        attr: &AttrSelector<Self::Impl>,
+        value: &<Self::Impl as SelectorImpl>::AttrValue) -> bool;
+
+    fn match_attr_substring(
+        &self,
+        attr: &AttrSelector<Self::Impl>,
+        value: &<Self::Impl as SelectorImpl>::AttrValue) -> bool;
+
+    fn match_attr_suffix(
+        &self,
+        attr: &AttrSelector<Self::Impl>,
+        value: &<Self::Impl as SelectorImpl>::AttrValue) -> bool;
 }
 
 pub trait MatchAttrGeneric {
-    fn match_attr<F>(&self, attr: &AttrSelector, test: F) -> bool where F: Fn(&str) -> bool;
+    type Impl: SelectorImpl;
+    fn match_attr<F>(&self, attr: &AttrSelector<Self::Impl>, test: F) -> bool where F: Fn(&str) -> bool;
 }
 
-impl<T> MatchAttr for T where T: MatchAttrGeneric {
-    type AttrValue = String;
-    fn match_attr_has(&self, attr: &AttrSelector) -> bool {
+impl<T> MatchAttr for T where T: MatchAttrGeneric, T::Impl: SelectorImpl<AttrValue = String> {
+    type Impl = T::Impl;
+
+    fn match_attr_has(&self, attr: &AttrSelector<Self::Impl>) -> bool {
         self.match_attr(attr, |_| true)
     }
-    fn match_attr_equals(&self, attr: &AttrSelector, value: &String) -> bool {
+
+    fn match_attr_equals(&self, attr: &AttrSelector<Self::Impl>, value: &String) -> bool {
         self.match_attr(attr, |v| v == value)
     }
-    fn match_attr_equals_ignore_ascii_case(&self, attr: &AttrSelector, value: &String) -> bool {
+
+    fn match_attr_equals_ignore_ascii_case(&self, attr: &AttrSelector<Self::Impl>,
+                                           value: &String) -> bool {
         self.match_attr(attr, |v| v.eq_ignore_ascii_case(value))
     }
-    fn match_attr_includes(&self, attr: &AttrSelector, value: &String) -> bool {
+
+    fn match_attr_includes(&self, attr: &AttrSelector<Self::Impl>, value: &String) -> bool {
         self.match_attr(attr, |attr_value| {
             attr_value.split(SELECTOR_WHITESPACE).any(|v| v == value)
         })
     }
-    fn match_attr_dash(&self, attr: &AttrSelector, value: &String) -> bool {
+
+    fn match_attr_dash(&self, attr: &AttrSelector<Self::Impl>, value: &String) -> bool {
         self.match_attr(attr, |attr_value| {
 
             // The attribute must start with the pattern.
@@ -65,17 +102,20 @@ impl<T> MatchAttr for T where T: MatchAttrGeneric {
             attr_value.as_bytes()[value.len()] == '-' as u8
         })
     }
-    fn match_attr_prefix(&self, attr: &AttrSelector, value: &String) -> bool {
+
+    fn match_attr_prefix(&self, attr: &AttrSelector<Self::Impl>, value: &String) -> bool {
         self.match_attr(attr, |attr_value| {
             attr_value.starts_with(value)
         })
     }
-    fn match_attr_substring(&self, attr: &AttrSelector, value: &String) -> bool {
+
+    fn match_attr_substring(&self, attr: &AttrSelector<Self::Impl>, value: &String) -> bool {
         self.match_attr(attr, |attr_value| {
             attr_value.contains(value)
         })
     }
-    fn match_attr_suffix(&self, attr: &AttrSelector, value: &String) -> bool {
+
+    fn match_attr_suffix(&self, attr: &AttrSelector<Self::Impl>, value: &String) -> bool {
         self.match_attr(attr, |attr_value| {
             attr_value.ends_with(value)
         })
@@ -83,8 +123,6 @@ impl<T> MatchAttr for T where T: MatchAttrGeneric {
 }
 
 pub trait Element: MatchAttr + Sized {
-    type Impl: SelectorImpl<AttrValue = <Self as MatchAttr>::AttrValue>;
-
     fn parent_element(&self) -> Option<Self>;
 
     // Skips non-element nodes

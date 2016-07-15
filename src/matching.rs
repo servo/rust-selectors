@@ -7,7 +7,7 @@ use std::sync::Arc;
 use bloom::BloomFilter;
 use smallvec::VecLike;
 use quickersort::sort_by;
-use string_cache::{self, Atom};
+use string_cache::Atom;
 
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
@@ -74,7 +74,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                         parent_bf: Option<&BloomFilter>,
                                         matching_rules_list: &mut V,
                                         shareable: &mut bool)
-                                        where E: Element<Impl=Impl, AttrValue=Impl::AttrValue>,
+                                        where E: Element<Impl=Impl>,
                                               V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
@@ -149,7 +149,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                           key: &Atom,
                                           matching_rules: &mut V,
                                           shareable: &mut bool)
-                                          where E: Element<Impl=Impl, AttrValue=Impl::AttrValue>,
+                                          where E: Element<Impl=Impl>,
                                                 V: VecLike<DeclarationBlock<T>> {
         match hash.get(key) {
             Some(rules) => {
@@ -169,7 +169,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                 rules: &[Rule<T, Impl>],
                                 matching_rules: &mut V,
                                 shareable: &mut bool)
-                                where E: Element<Impl=Impl, AttrValue=Impl::AttrValue>,
+                                where E: Element<Impl=Impl>,
                                       V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {
@@ -537,19 +537,18 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
 /// will almost certainly break as elements will start mistakenly sharing styles. (See
 /// `can_share_style_with` in `servo/components/style/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
-                                  element: &E,
-                                  shareable: &mut bool)
-                                  -> bool
-                                  where E: Element {
+pub fn matches_simple_selector<'a, E>(selector: &SimpleSelector<E::Impl>,
+                                      element: &'a E,
+                                      shareable: &mut bool)
+                                      -> bool
+                                     where E: Element {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
             element.get_local_name() == *name
         }
         SimpleSelector::Namespace(ref namespace) => {
-            // UFCS to work around https://github.com/rust-lang/rust/issues/34792
-            PartialEq::<string_cache::Namespace>::eq(&element.get_namespace(), namespace)
+            element.get_namespace() == E::Impl::borrow_namespace(namespace)
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {

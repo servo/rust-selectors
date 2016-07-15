@@ -199,6 +199,13 @@ impl BloomHash for Namespace {
     }
 }
 
+impl BloomHash for String {
+    #[inline]
+    fn bloom_hash(&self) -> u32 {
+        unimplemented!()
+    }
+}
+
 #[inline]
 fn full(slot: &u8) -> bool {
     *slot == 0xff
