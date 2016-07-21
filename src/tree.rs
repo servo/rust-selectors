@@ -6,7 +6,7 @@
 //! style.
 
 use matching::ElementFlags;
-use parser::{AttrSelector, SelectorImpl, TypeConstructor};
+use parser::{AttrSelector, SelectorImpl};
 use std::ascii::AsciiExt;
 use string_cache::{Atom, BorrowedAtom};
 
@@ -139,7 +139,7 @@ pub trait Element: MatchAttr + Sized {
 
     fn is_html_element_in_html_document(&self) -> bool;
     fn get_local_name<'a>(&'a self) -> BorrowedAtom<'a>;
-    fn get_namespace<'a>(&'a self) -> <Self::Impl as TypeConstructor<'a>>::BorrowedNamespace;
+    fn get_namespace<'a>(&'a self) -> &<Self::Impl as SelectorImpl>::BorrowedNamespace;
 
     fn match_non_ts_pseudo_class(&self, pc: <Self::Impl as SelectorImpl>::NonTSPseudoClass) -> bool;
 

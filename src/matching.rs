@@ -1,6 +1,7 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -548,7 +549,7 @@ pub fn matches_simple_selector<'a, E>(selector: &SimpleSelector<E::Impl>,
             element.get_local_name() == *name
         }
         SimpleSelector::Namespace(ref namespace) => {
-            element.get_namespace() == E::Impl::borrow_namespace(namespace)
+            element.get_namespace() == namespace.borrow()
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {

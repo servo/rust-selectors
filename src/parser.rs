@@ -5,7 +5,7 @@
 use bloom::BloomHash;
 use cssparser::{Token, Parser, parse_nth};
 use std::ascii::AsciiExt;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::cmp;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -22,18 +22,13 @@ use HashMap;
 #[cfg(not(feature = "heap_size"))] pub trait MaybeHeapSizeOf {}
 #[cfg(not(feature = "heap_size"))] impl<T> MaybeHeapSizeOf for T {}
 
-pub trait TypeConstructor<'a> {
-    type BorrowedNamespace: PartialEq;
-}
-
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
-pub trait SelectorImpl: for<'a> TypeConstructor<'a> {
+pub trait SelectorImpl {
     type AttrValue: Clone + Debug + MaybeHeapSizeOf + PartialEq;
-    type Namespace: Clone + Debug + MaybeHeapSizeOf + PartialEq + Eq + Hash + BloomHash + Default;
-
-    fn borrow_namespace<'a>(ns: &'a Self::Namespace)
-                            -> <Self as TypeConstructor<'a>>::BorrowedNamespace;
+    type Namespace: Clone + Debug + MaybeHeapSizeOf + PartialEq + Eq + Hash + BloomHash + Default
+                    + Borrow<Self::BorrowedNamespace>;
+    type BorrowedNamespace: ?Sized + PartialEq;
 
     /// Although it could, String does not implement From<Cow<str>>
     fn attr_value_from_cow_str(s: Cow<str>) -> Self::AttrValue;
@@ -707,17 +702,12 @@ pub mod tests {
     #[derive(PartialEq, Debug)]
     pub struct DummySelectorImpl;
 
-    impl<'a> TypeConstructor<'a> for DummySelectorImpl {
-        type BorrowedNamespace = &'a str;
-    }
-
     impl SelectorImpl for DummySelectorImpl {
         type AttrValue = String;
         type Namespace = String;
+        type BorrowedNamespace = str;
 
         type NonTSPseudoClass = PseudoClass;
-
-        fn borrow_namespace(ns: &String) -> &str { ns }
 
         fn attr_value_from_cow_str(s: Cow<str>) -> String {
             s.into_owned()
