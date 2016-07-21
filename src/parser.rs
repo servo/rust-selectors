@@ -22,16 +22,30 @@ use HashMap;
 #[cfg(not(feature = "heap_size"))] pub trait MaybeHeapSizeOf {}
 #[cfg(not(feature = "heap_size"))] impl<T> MaybeHeapSizeOf for T {}
 
+/// Although it could, String does not implement From<Cow<str>>
+pub trait FromCowStr {
+    fn from_cow_str(s: Cow<str>) -> Self;
+}
+
+impl FromCowStr for String {
+    fn from_cow_str(s: Cow<str>) -> Self {
+        s.into_owned()
+    }
+}
+
+impl FromCowStr for ::string_cache::Atom {
+    fn from_cow_str(s: Cow<str>) -> Self {
+        s.into()
+    }
+}
+
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
 pub trait SelectorImpl {
-    type AttrValue: Clone + Debug + MaybeHeapSizeOf + PartialEq;
     type Namespace: Clone + Debug + MaybeHeapSizeOf + PartialEq + Eq + Hash + BloomHash + Default
                     + Borrow<Self::BorrowedNamespace>;
     type BorrowedNamespace: ?Sized + PartialEq;
-
-    /// Although it could, String does not implement From<Cow<str>>
-    fn attr_value_from_cow_str(s: Cow<str>) -> Self::AttrValue;
+    type AttrValue: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr;
 
     fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector<Self>) -> bool {
         false
@@ -431,7 +445,7 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, i
     };
 
     fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrValue, ()> {
-        Ok(Impl::attr_value_from_cow_str(try!(input.expect_ident_or_string())))
+        Ok(Impl::AttrValue::from_cow_str(try!(input.expect_ident_or_string())))
     }
     // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
@@ -681,7 +695,6 @@ fn parse_simple_pseudo_class<Impl: SelectorImpl>(context: &ParserContext<Impl>, 
 // NB: pub module in order to access the DummySelectorImpl
 #[cfg(test)]
 pub mod tests {
-    use std::borrow::Cow;
     use std::sync::Arc;
     use cssparser::Parser;
     use string_cache::Atom;
@@ -708,10 +721,6 @@ pub mod tests {
         type BorrowedNamespace = str;
 
         type NonTSPseudoClass = PseudoClass;
-
-        fn attr_value_from_cow_str(s: Cow<str>) -> String {
-            s.into_owned()
-        }
 
         fn parse_non_ts_pseudo_class(context: &ParserContext<Self>, name: &str)
                                      -> Result<PseudoClass, ()> {
