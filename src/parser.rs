@@ -42,10 +42,13 @@ impl FromCowStr for ::string_cache::Atom {
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
 pub trait SelectorImpl {
-    type Namespace: Clone + Debug + MaybeHeapSizeOf + PartialEq + Eq + Hash + BloomHash + Default
-                    + Borrow<Self::BorrowedNamespace>;
-    type BorrowedNamespace: ?Sized + PartialEq;
     type AttrValue: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr;
+    type LocalName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash
+                    + Borrow<Self::BorrowedLocalName> + for<'a> From<&'a str>;
+    type Namespace: Clone + Debug + MaybeHeapSizeOf + Eq + Default + Hash + BloomHash
+                    + Borrow<Self::BorrowedNamespace>;
+    type BorrowedNamespace: ?Sized + Eq;
+    type BorrowedLocalName: ?Sized + Eq + Hash;
 
     fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector<Self>) -> bool {
         false
@@ -123,7 +126,7 @@ pub enum Combinator {
 pub enum SimpleSelector<Impl: SelectorImpl> {
     ID(Atom),
     Class(Atom),
-    LocalName(LocalName),
+    LocalName(LocalName<Impl>),
     Namespace(Impl::Namespace),
 
     // Attribute selectors
@@ -162,16 +165,16 @@ pub enum CaseSensitivity {
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-pub struct LocalName {
-    pub name: Atom,
-    pub lower_name: Atom,
+pub struct LocalName<Impl: ?Sized + SelectorImpl> {
+    pub name: Impl::LocalName,
+    pub lower_name: Impl::LocalName,
 }
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct AttrSelector<Impl: ?Sized + SelectorImpl> {
-    pub name: Atom,
-    pub lower_name: Atom,
+    pub name: Impl::LocalName,
+    pub lower_name: Impl::LocalName,
     pub namespace: NamespaceConstraint<Impl>,
 }
 
@@ -340,8 +343,8 @@ fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input:
             match local_name {
                 Some(name) => {
                     simple_selectors.push(SimpleSelector::LocalName(LocalName {
-                        name: Atom::from(&*name),
-                        lower_name: Atom::from(&*name.to_ascii_lowercase()),
+                        lower_name: Impl::LocalName::from(&*name.to_ascii_lowercase()),
+                        name: Impl::LocalName::from_cow_str(name),
                     }))
                 }
                 None => (),
@@ -439,8 +442,8 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, i
         Some((_, None)) => unreachable!(),
         Some((namespace, Some(local_name))) => AttrSelector {
             namespace: namespace,
-            lower_name: Atom::from(&*local_name.to_ascii_lowercase()),
-            name: Atom::from(&*local_name),
+            lower_name: Impl::LocalName::from(&*local_name.to_ascii_lowercase()),
+            name: Impl::LocalName::from_cow_str(local_name),
         },
     };
 
@@ -718,7 +721,9 @@ pub mod tests {
     impl SelectorImpl for DummySelectorImpl {
         type AttrValue = String;
         type Namespace = String;
+        type LocalName = String;
         type BorrowedNamespace = str;
+        type BorrowedLocalName = str;
 
         type NonTSPseudoClass = PseudoClass;
 
@@ -784,8 +789,8 @@ pub mod tests {
         assert_eq!(parse("EeÉ"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
-                    name: Atom::from("EeÉ"),
-                    lower_name: Atom::from("eeÉ") })),
+                    name: String::from("EeÉ"),
+                    lower_name: String::from("eeÉ") })),
                 next: None,
             }),
             pseudo_element: None,
@@ -813,8 +818,8 @@ pub mod tests {
         assert_eq!(parse("e.foo#bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
-                                            name: Atom::from("e"),
-                                            lower_name: Atom::from("e") }),
+                                            name: String::from("e"),
+                                            lower_name: String::from("e") }),
                                        SimpleSelector::Class(Atom::from("foo")),
                                        SimpleSelector::ID(Atom::from("bar"))),
                 next: None,
@@ -827,8 +832,8 @@ pub mod tests {
                 simple_selectors: vec!(SimpleSelector::ID(Atom::from("bar"))),
                 next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
-                                                name: Atom::from("e"),
-                                                lower_name: Atom::from("e") }),
+                                                name: String::from("e"),
+                                                lower_name: String::from("e") }),
                                            SimpleSelector::Class(Atom::from("foo"))),
                     next: None,
                 }), Combinator::Descendant)),
@@ -842,8 +847,8 @@ pub mod tests {
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(SimpleSelector::AttrExists(AttrSelector {
-                    name: Atom::from("Foo"),
-                    lower_name: Atom::from("foo"),
+                    name: String::from("Foo"),
+                    lower_name: String::from("foo"),
                     namespace: NamespaceConstraint::Specific("".into()),
                 })),
                 next: None,
@@ -861,8 +866,8 @@ pub mod tests {
                 simple_selectors: vec![
                     SimpleSelector::Namespace(MATHML.into()),
                     SimpleSelector::AttrExists(AttrSelector {
-                        name: Atom::from("Foo"),
-                        lower_name: Atom::from("foo"),
+                        name: String::from("Foo"),
+                        lower_name: String::from("foo"),
                         namespace: NamespaceConstraint::Specific("".into()),
                     }),
                 ],
@@ -877,8 +882,8 @@ pub mod tests {
                 simple_selectors: vec!(
                     SimpleSelector::Namespace(MATHML.into()),
                     SimpleSelector::LocalName(LocalName {
-                        name: Atom::from("e"),
-                        lower_name: Atom::from("e") }),
+                        name: String::from("e"),
+                        lower_name: String::from("e") }),
                 ),
                 next: None,
             }),
@@ -889,8 +894,8 @@ pub mod tests {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec![
                     SimpleSelector::AttrDashMatch(AttrSelector {
-                        name: Atom::from("attr"),
-                        lower_name: Atom::from("attr"),
+                        name: String::from("attr"),
+                        lower_name: String::from("attr"),
                         namespace: NamespaceConstraint::Specific("".into()),
                     }, "foo".to_owned())
                 ],
@@ -913,8 +918,8 @@ pub mod tests {
                 simple_selectors: vec!(),
                 next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
-                        name: atom!("div"),
-                        lower_name: atom!("div") })),
+                        name: String::from("div"),
+                        lower_name: String::from("div") })),
                     next: None,
                 }), Combinator::Descendant)),
             }),

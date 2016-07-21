@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use bloom::BloomFilter;
@@ -39,10 +40,10 @@ pub struct SelectorMap<T, Impl: SelectorImpl> {
     // TODO: Tune the initial capacity of the HashMap
     id_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
     class_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
-    local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
+    local_name_hash: HashMap<Impl::LocalName, Vec<Rule<T, Impl>>>,
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
-    lower_local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
+    lower_local_name_hash: HashMap<Impl::LocalName, Vec<Rule<T, Impl>>>,
     /// Rules that don't have ID, class, or element selectors.
     other_rules: Vec<Rule<T, Impl>>,
     /// Whether this hash is empty.
@@ -144,14 +145,18 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         sort_by(&mut matching_rules_list[init_len..], &compare);
     }
 
-    fn get_matching_rules_from_hash<E, V>(element: &E,
-                                          parent_bf: Option<&BloomFilter>,
-                                          hash: &HashMap<Atom, Vec<Rule<T, Impl>>>,
-                                          key: &Atom,
-                                          matching_rules: &mut V,
-                                          shareable: &mut bool)
-                                          where E: Element<Impl=Impl>,
-                                                V: VecLike<DeclarationBlock<T>> {
+    fn get_matching_rules_from_hash<E, S, B: ?Sized, V>(
+        element: &E,
+        parent_bf: Option<&BloomFilter>,
+        hash: &HashMap<S, Vec<Rule<T, Impl>>>,
+        key: &B,
+        matching_rules: &mut V,
+        shareable: &mut bool)
+    where E: Element<Impl=Impl>,
+          S: Borrow<B> + Eq + Hash,
+          B: Eq + Hash,
+          V: VecLike<DeclarationBlock<T>>
+    {
         match hash.get(key) {
             Some(rules) => {
                 SelectorMap::get_matching_rules(element,
@@ -232,12 +237,15 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Retrieve the name if it is a type selector, or None otherwise.
-    fn get_local_name(rule: &Rule<T, Impl>) -> Option<LocalName> {
+    fn get_local_name(rule: &Rule<T, Impl>) -> Option<LocalName<Impl>> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
-                SimpleSelector::LocalName(ref name) => {
-                    return Some(name.clone())
+                SimpleSelector::LocalName(ref n) => {
+                    return Some(LocalName {
+                        name: n.name.clone(),
+                        lower_name: n.lower_name.clone(),
+                    })
                 }
                 _ => {}
             }
@@ -546,7 +554,7 @@ pub fn matches_simple_selector<'a, E>(selector: &SimpleSelector<E::Impl>,
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
-            element.get_local_name() == *name
+            element.get_local_name() == name.borrow()
         }
         SimpleSelector::Namespace(ref namespace) => {
             element.get_namespace() == namespace.borrow()
@@ -681,7 +689,7 @@ fn matches_generic_nth_child<E>(element: &E,
         };
 
         if is_of_type {
-            if element.get_local_name() == *sibling.get_local_name() &&
+            if element.get_local_name() == sibling.get_local_name() &&
                 element.get_namespace() == sibling.get_namespace() {
                 index += 1;
             }
@@ -741,9 +749,11 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
     result
 }
 
-fn find_push<T, Impl: SelectorImpl>(map: &mut HashMap<Atom, Vec<Rule<T, Impl>>>,
-                                    key: Atom,
-                                    value: Rule<T, Impl>) {
+fn find_push<T, Impl: SelectorImpl, S: Eq + Hash>(
+    map: &mut HashMap<S, Vec<Rule<T, Impl>>>,
+    key: S,
+    value: Rule<T, Impl>
+) {
     if let Some(vec) = map.get_mut(&key) {
         vec.push(value);
         return
@@ -825,8 +835,8 @@ mod tests {
         let check = |i: usize, names: Option<(&str, &str)>| {
             assert!(SelectorMap::get_local_name(&rules_list[i][0])
                     == names.map(|(name, lower_name)| LocalName {
-                            name: Atom::from(name),
-                            lower_name: Atom::from(lower_name) }))
+                            name: String::from(name),
+                            lower_name: String::from(lower_name) }))
         };
         check(0, Some(("img", "img")));
         check(1, None);
