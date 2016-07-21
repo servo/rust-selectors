@@ -8,7 +8,6 @@
 use matching::ElementFlags;
 use parser::{AttrSelector, SelectorImpl};
 use std::ascii::AsciiExt;
-use string_cache::Atom;
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub static SELECTOR_WHITESPACE: &'static [char] = &[' ', '\t', '\n', '\r', '\x0C'];
@@ -143,8 +142,8 @@ pub trait Element: MatchAttr + Sized {
 
     fn match_non_ts_pseudo_class(&self, pc: <Self::Impl as SelectorImpl>::NonTSPseudoClass) -> bool;
 
-    fn get_id(&self) -> Option<Atom>;
-    fn has_class(&self, name: &Atom) -> bool;
+    fn get_id(&self) -> Option<<Self::Impl as SelectorImpl>::Identifier>;
+    fn has_class(&self, name: &<Self::Impl as SelectorImpl>::ClassName) -> bool;
 
     /// Returns whether this element matches `:empty`.
     ///
@@ -163,7 +162,7 @@ pub trait Element: MatchAttr + Sized {
     // really messy, since there is a `JSRef` and a `RefCell` involved. Maybe
     // in the future when we have associated types and/or a more convenient
     // JS GC story... --pcwalton
-    fn each_class<F>(&self, callback: F) where F: FnMut(&Atom);
+    fn each_class<F>(&self, callback: F) where F: FnMut(&<Self::Impl as SelectorImpl>::ClassName);
 
     /// Add flags to the element. See the `ElementFlags` docs for details.
     ///

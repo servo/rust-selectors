@@ -10,7 +10,6 @@ use std::cmp;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
-use string_cache::Atom;
 
 use HashMap;
 
@@ -43,6 +42,8 @@ impl FromCowStr for ::string_cache::Atom {
 /// of pseudo-classes/elements
 pub trait SelectorImpl {
     type AttrValue: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr;
+    type Identifier: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
+    type ClassName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
     type LocalName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash
                     + Borrow<Self::BorrowedLocalName> + for<'a> From<&'a str>;
     type Namespace: Clone + Debug + MaybeHeapSizeOf + Eq + Default + Hash + BloomHash
@@ -124,8 +125,8 @@ pub enum Combinator {
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 pub enum SimpleSelector<Impl: SelectorImpl> {
-    ID(Atom),
-    Class(Atom),
+    ID(Impl::Identifier),
+    Class(Impl::ClassName),
     LocalName(LocalName<Impl>),
     Namespace(Impl::Namespace),
 
@@ -621,13 +622,13 @@ fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>,
     let start_position = input.position();
     match input.next_including_whitespace() {
         Ok(Token::IDHash(id)) => {
-            let id = SimpleSelector::ID(Atom::from(&*id));
+            let id = SimpleSelector::ID(Impl::Identifier::from_cow_str(id));
             Ok(Some(SimpleSelectorParseResult::SimpleSelector(id)))
         }
         Ok(Token::Delim('.')) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(class)) => {
-                    let class = SimpleSelector::Class(Atom::from(&*class));
+                    let class = SimpleSelector::Class(Impl::ClassName::from_cow_str(class));
                     Ok(Some(SimpleSelectorParseResult::SimpleSelector(class)))
                 }
                 _ => Err(()),
@@ -700,7 +701,6 @@ fn parse_simple_pseudo_class<Impl: SelectorImpl>(context: &ParserContext<Impl>, 
 pub mod tests {
     use std::sync::Arc;
     use cssparser::Parser;
-    use string_cache::Atom;
     use super::*;
 
     #[derive(PartialEq, Clone, Debug)]
@@ -720,6 +720,8 @@ pub mod tests {
 
     impl SelectorImpl for DummySelectorImpl {
         type AttrValue = String;
+        type Identifier = String;
+        type ClassName = String;
         type Namespace = String;
         type LocalName = String;
         type BorrowedNamespace = str;
@@ -799,7 +801,7 @@ pub mod tests {
         assert_eq!(parse(".foo:lang(en-US)"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec![
-                    SimpleSelector::Class(Atom::from("foo")),
+                    SimpleSelector::Class(String::from("foo")),
                     SimpleSelector::NonTSPseudoClass(PseudoClass::Lang("en-US".to_owned()))
                 ],
                 next: None,
@@ -809,7 +811,7 @@ pub mod tests {
         })));
         assert_eq!(parse("#bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::ID(Atom::from("bar"))),
+                simple_selectors: vec!(SimpleSelector::ID(String::from("bar"))),
                 next: None,
             }),
             pseudo_element: None,
@@ -820,8 +822,8 @@ pub mod tests {
                 simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
                                             name: String::from("e"),
                                             lower_name: String::from("e") }),
-                                       SimpleSelector::Class(Atom::from("foo")),
-                                       SimpleSelector::ID(Atom::from("bar"))),
+                                       SimpleSelector::Class(String::from("foo")),
+                                       SimpleSelector::ID(String::from("bar"))),
                 next: None,
             }),
             pseudo_element: None,
@@ -829,12 +831,12 @@ pub mod tests {
         })));
         assert_eq!(parse("e.foo #bar"), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
-                simple_selectors: vec!(SimpleSelector::ID(Atom::from("bar"))),
+                simple_selectors: vec!(SimpleSelector::ID(String::from("bar"))),
                 next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec!(SimpleSelector::LocalName(LocalName {
                                                 name: String::from("e"),
                                                 lower_name: String::from("e") }),
-                                           SimpleSelector::Class(Atom::from("foo"))),
+                                           SimpleSelector::Class(String::from("foo"))),
                     next: None,
                 }), Combinator::Descendant)),
             }),
@@ -929,11 +931,11 @@ pub mod tests {
         assert_eq!(parse("#d1 > .ok"), Ok(vec![Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec![
-                    SimpleSelector::Class(Atom::from("ok")),
+                    SimpleSelector::Class(String::from("ok")),
                 ],
                 next: Some((Arc::new(CompoundSelector {
                     simple_selectors: vec![
-                        SimpleSelector::ID(Atom::from("d1")),
+                        SimpleSelector::ID(String::from("d1")),
                     ],
                     next: None,
                 }), Combinator::Child)),

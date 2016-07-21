@@ -9,7 +9,6 @@ use std::sync::Arc;
 use bloom::BloomFilter;
 use smallvec::VecLike;
 use quickersort::sort_by;
-use string_cache::Atom;
 
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
@@ -38,8 +37,8 @@ use HashMap;
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct SelectorMap<T, Impl: SelectorImpl> {
     // TODO: Tune the initial capacity of the HashMap
-    id_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
-    class_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
+    id_hash: HashMap<Impl::Identifier, Vec<Rule<T, Impl>>>,
+    class_hash: HashMap<Impl::ClassName, Vec<Rule<T, Impl>>>,
     local_name_hash: HashMap<Impl::LocalName, Vec<Rule<T, Impl>>>,
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
@@ -209,7 +208,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Retrieve the first ID name in Rule, or None otherwise.
-    fn get_id_name(rule: &Rule<T, Impl>) -> Option<Atom> {
+    fn get_id_name(rule: &Rule<T, Impl>) -> Option<Impl::Identifier> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -223,7 +222,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Retrieve the FIRST class name in Rule, or None otherwise.
-    fn get_class_name(rule: &Rule<T, Impl>) -> Option<Atom> {
+    fn get_class_name(rule: &Rule<T, Impl>) -> Option<Impl::ClassName> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -767,7 +766,6 @@ mod tests {
     use super::{DeclarationBlock, Rule, SelectorMap};
     use parser::LocalName;
     use parser::tests::DummySelectorImpl;
-    use string_cache::Atom;
     use cssparser::Parser;
     use parser::ParserContext;
 
@@ -819,13 +817,13 @@ mod tests {
     fn test_get_id_name(){
         let rules_list = get_mock_rules(&[".intro", "#top"]);
         assert_eq!(SelectorMap::get_id_name(&rules_list[0][0]), None);
-        assert_eq!(SelectorMap::get_id_name(&rules_list[1][0]), Some(atom!("top")));
+        assert_eq!(SelectorMap::get_id_name(&rules_list[1][0]), Some(String::from("top")));
     }
 
     #[test]
     fn test_get_class_name(){
         let rules_list = get_mock_rules(&[".intro.foo", "#top"]);
-        assert_eq!(SelectorMap::get_class_name(&rules_list[0][0]), Some(Atom::from("intro")));
+        assert_eq!(SelectorMap::get_class_name(&rules_list[0][0]), Some(String::from("intro")));
         assert_eq!(SelectorMap::get_class_name(&rules_list[1][0]), None);
     }
 
@@ -849,10 +847,10 @@ mod tests {
         let rules_list = get_mock_rules(&[".intro.foo", "#top"]);
         let mut selector_map = SelectorMap::new();
         selector_map.insert(rules_list[1][0].clone());
-        assert_eq!(1, selector_map.id_hash.get(&atom!("top")).unwrap()[0].declarations.source_order);
+        assert_eq!(1, selector_map.id_hash.get("top").unwrap()[0].declarations.source_order);
         selector_map.insert(rules_list[0][0].clone());
-        assert_eq!(0, selector_map.class_hash.get(&Atom::from("intro")).unwrap()[0].declarations.source_order);
-        assert!(selector_map.class_hash.get(&Atom::from("foo")).is_none());
+        assert_eq!(0, selector_map.class_hash.get("intro").unwrap()[0].declarations.source_order);
+        assert!(selector_map.class_hash.get("foo").is_none());
     }
 
     #[test]
