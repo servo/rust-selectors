@@ -1,16 +1,17 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use bloom::BloomFilter;
 use smallvec::VecLike;
 use quickersort::sort_by;
-use string_cache::Atom;
 
 use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
-use parser::{MaybeAtom, SimpleSelector, Selector, SelectorImpl};
+use parser::{SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 use HashMap;
 
@@ -36,12 +37,12 @@ use HashMap;
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct SelectorMap<T, Impl: SelectorImpl> {
     // TODO: Tune the initial capacity of the HashMap
-    id_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
-    class_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
-    local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
+    id_hash: HashMap<Impl::Identifier, Vec<Rule<T, Impl>>>,
+    class_hash: HashMap<Impl::ClassName, Vec<Rule<T, Impl>>>,
+    local_name_hash: HashMap<Impl::LocalName, Vec<Rule<T, Impl>>>,
     /// Same as local_name_hash, but keys are lower-cased.
     /// For HTML elements in HTML documents.
-    lower_local_name_hash: HashMap<Atom, Vec<Rule<T, Impl>>>,
+    lower_local_name_hash: HashMap<Impl::LocalName, Vec<Rule<T, Impl>>>,
     /// Rules that don't have ID, class, or element selectors.
     other_rules: Vec<Rule<T, Impl>>,
     /// Whether this hash is empty.
@@ -74,7 +75,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                         parent_bf: Option<&BloomFilter>,
                                         matching_rules_list: &mut V,
                                         shareable: &mut bool)
-                                        where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
+                                        where E: Element<Impl=Impl>,
                                               V: VecLike<DeclarationBlock<T>> {
         if self.empty {
             return
@@ -143,14 +144,18 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         sort_by(&mut matching_rules_list[init_len..], &compare);
     }
 
-    fn get_matching_rules_from_hash<E, V>(element: &E,
-                                          parent_bf: Option<&BloomFilter>,
-                                          hash: &HashMap<Atom, Vec<Rule<T, Impl>>>,
-                                          key: &Atom,
-                                          matching_rules: &mut V,
-                                          shareable: &mut bool)
-                                          where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
-                                                V: VecLike<DeclarationBlock<T>> {
+    fn get_matching_rules_from_hash<E, Str, BorrowedStr: ?Sized, Vector>(
+        element: &E,
+        parent_bf: Option<&BloomFilter>,
+        hash: &HashMap<Str, Vec<Rule<T, Impl>>>,
+        key: &BorrowedStr,
+        matching_rules: &mut Vector,
+        shareable: &mut bool)
+    where E: Element<Impl=Impl>,
+          Str: Borrow<BorrowedStr> + Eq + Hash,
+          BorrowedStr: Eq + Hash,
+          Vector: VecLike<DeclarationBlock<T>>
+    {
         match hash.get(key) {
             Some(rules) => {
                 SelectorMap::get_matching_rules(element,
@@ -169,7 +174,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                 rules: &[Rule<T, Impl>],
                                 matching_rules: &mut V,
                                 shareable: &mut bool)
-                                where E: Element<Impl=Impl, AttrString=Impl::AttrString>,
+                                where E: Element<Impl=Impl>,
                                       V: VecLike<DeclarationBlock<T>> {
         for rule in rules.iter() {
             if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {
@@ -203,7 +208,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Retrieve the first ID name in Rule, or None otherwise.
-    fn get_id_name(rule: &Rule<T, Impl>) -> Option<Atom> {
+    fn get_id_name(rule: &Rule<T, Impl>) -> Option<Impl::Identifier> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -217,7 +222,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Retrieve the FIRST class name in Rule, or None otherwise.
-    fn get_class_name(rule: &Rule<T, Impl>) -> Option<Atom> {
+    fn get_class_name(rule: &Rule<T, Impl>) -> Option<Impl::ClassName> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
@@ -231,12 +236,15 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     }
 
     /// Retrieve the name if it is a type selector, or None otherwise.
-    fn get_local_name(rule: &Rule<T, Impl>) -> Option<LocalName> {
+    fn get_local_name(rule: &Rule<T, Impl>) -> Option<LocalName<Impl>> {
         let simple_selector_sequence = &rule.selector.simple_selectors;
         for ss in simple_selector_sequence.iter() {
             match *ss {
-                SimpleSelector::LocalName(ref name) => {
-                    return Some(name.clone())
+                SimpleSelector::LocalName(ref n) => {
+                    return Some(LocalName {
+                        name: n.name.clone(),
+                        lower_name: n.lower_name.clone(),
+                    })
                 }
                 _ => {}
             }
@@ -530,61 +538,6 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
     }
 }
 
-bitflags! {
-    pub flags CommonStyleAffectingAttributes: u8 {
-        const HIDDEN_ATTRIBUTE = 0x01,
-        const NO_WRAP_ATTRIBUTE = 0x02,
-        const ALIGN_LEFT_ATTRIBUTE = 0x04,
-        const ALIGN_CENTER_ATTRIBUTE = 0x08,
-        const ALIGN_RIGHT_ATTRIBUTE = 0x10,
-    }
-}
-
-pub struct CommonStyleAffectingAttributeInfo {
-    pub atom: Atom,
-    pub mode: CommonStyleAffectingAttributeMode,
-}
-
-#[derive(Clone)]
-pub enum CommonStyleAffectingAttributeMode {
-    IsPresent(CommonStyleAffectingAttributes),
-    IsEqual(Atom, CommonStyleAffectingAttributes),
-}
-
-// NB: This must match the order in `selectors::matching::CommonStyleAffectingAttributes`.
-#[inline]
-pub fn common_style_affecting_attributes() -> [CommonStyleAffectingAttributeInfo; 5] {
-    [
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("hidden"),
-            mode: CommonStyleAffectingAttributeMode::IsPresent(HIDDEN_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("nowrap"),
-            mode: CommonStyleAffectingAttributeMode::IsPresent(NO_WRAP_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("left"), ALIGN_LEFT_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("center"), ALIGN_CENTER_ATTRIBUTE),
-        },
-        CommonStyleAffectingAttributeInfo {
-            atom: atom!("align"),
-            mode: CommonStyleAffectingAttributeMode::IsEqual(atom!("right"), ALIGN_RIGHT_ATTRIBUTE),
-        }
-    ]
-}
-
-/// Attributes that, if present, disable style sharing. All legacy HTML attributes must be in
-/// either this list or `common_style_affecting_attributes`. See the comment in
-/// `synthesize_presentational_hints_for_legacy_attributes`.
-pub fn rare_style_affecting_attributes() -> [Atom; 3] {
-    [ atom!("bgcolor"), atom!("border"), atom!("colspan") ]
-}
-
 /// Determines whether the given element matches the given single selector.
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
@@ -592,18 +545,18 @@ pub fn rare_style_affecting_attributes() -> [Atom; 3] {
 /// will almost certainly break as elements will start mistakenly sharing styles. (See
 /// `can_share_style_with` in `servo/components/style/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
-                                  element: &E,
-                                  shareable: &mut bool)
-                                  -> bool
-                                  where E: Element {
+pub fn matches_simple_selector<'a, E>(selector: &SimpleSelector<E::Impl>,
+                                      element: &'a E,
+                                      shareable: &mut bool)
+                                      -> bool
+                                      where E: Element {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
-            element.get_local_name() == *name
+            element.get_local_name() == name.borrow()
         }
         SimpleSelector::Namespace(ref namespace) => {
-            element.get_namespace() == *namespace
+            element.get_namespace() == namespace.borrow()
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
@@ -616,28 +569,13 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.has_class(class)
         }
         SimpleSelector::AttrExists(ref attr) => {
-            // NB(pcwalton): If you update this, remember to update the corresponding list in
-            // `can_share_style_with()` as well.
-            if common_style_affecting_attributes().iter().all(|common_attr_info| {
-                !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                    CommonStyleAffectingAttributeMode::IsPresent(_) => true,
-                    CommonStyleAffectingAttributeMode::IsEqual(..) => false,
-                })
-            }) {
+            if E::Impl::attr_exists_selector_is_shareable(attr) {
                 *shareable = false;
             }
             element.match_attr_has(attr)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
-            if !value.equals_atom(&atom!("dir")) &&
-                    common_style_affecting_attributes().iter().all(|common_attr_info| {
-                        !(common_attr_info.atom == attr.name && match common_attr_info.mode {
-                            CommonStyleAffectingAttributeMode::IsEqual(ref target_value, _) => value.equals_atom(target_value),
-                            CommonStyleAffectingAttributeMode::IsPresent(_) => false,
-                        })
-                    }) {
-                // FIXME(pcwalton): Remove once we start actually supporting RTL text. This is in
-                // here because the UA style otherwise disables all style sharing completely.
+            if E::Impl::attr_equals_selector_is_shareable(attr, value) {
                 *shareable = false
             }
             match case_sensitivity {
@@ -750,8 +688,8 @@ fn matches_generic_nth_child<E>(element: &E,
         };
 
         if is_of_type {
-            if element.get_local_name() == *sibling.get_local_name() &&
-                element.get_namespace() == *sibling.get_namespace() {
+            if element.get_local_name() == sibling.get_local_name() &&
+                element.get_namespace() == sibling.get_namespace() {
                 index += 1;
             }
         } else {
@@ -810,9 +748,11 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
     result
 }
 
-fn find_push<T, Impl: SelectorImpl>(map: &mut HashMap<Atom, Vec<Rule<T, Impl>>>,
-                                    key: Atom,
-                                    value: Rule<T, Impl>) {
+fn find_push<T, Impl: SelectorImpl, Str: Eq + Hash>(
+    map: &mut HashMap<Str, Vec<Rule<T, Impl>>>,
+    key: Str,
+    value: Rule<T, Impl>
+) {
     if let Some(vec) = map.get_mut(&key) {
         vec.push(value);
         return
@@ -826,7 +766,6 @@ mod tests {
     use super::{DeclarationBlock, Rule, SelectorMap};
     use parser::LocalName;
     use parser::tests::DummySelectorImpl;
-    use string_cache::Atom;
     use cssparser::Parser;
     use parser::ParserContext;
 
@@ -878,13 +817,13 @@ mod tests {
     fn test_get_id_name(){
         let rules_list = get_mock_rules(&[".intro", "#top"]);
         assert_eq!(SelectorMap::get_id_name(&rules_list[0][0]), None);
-        assert_eq!(SelectorMap::get_id_name(&rules_list[1][0]), Some(atom!("top")));
+        assert_eq!(SelectorMap::get_id_name(&rules_list[1][0]), Some(String::from("top")));
     }
 
     #[test]
     fn test_get_class_name(){
         let rules_list = get_mock_rules(&[".intro.foo", "#top"]);
-        assert_eq!(SelectorMap::get_class_name(&rules_list[0][0]), Some(Atom::from("intro")));
+        assert_eq!(SelectorMap::get_class_name(&rules_list[0][0]), Some(String::from("intro")));
         assert_eq!(SelectorMap::get_class_name(&rules_list[1][0]), None);
     }
 
@@ -894,8 +833,8 @@ mod tests {
         let check = |i: usize, names: Option<(&str, &str)>| {
             assert!(SelectorMap::get_local_name(&rules_list[i][0])
                     == names.map(|(name, lower_name)| LocalName {
-                            name: Atom::from(name),
-                            lower_name: Atom::from(lower_name) }))
+                            name: String::from(name),
+                            lower_name: String::from(lower_name) }))
         };
         check(0, Some(("img", "img")));
         check(1, None);
@@ -908,10 +847,10 @@ mod tests {
         let rules_list = get_mock_rules(&[".intro.foo", "#top"]);
         let mut selector_map = SelectorMap::new();
         selector_map.insert(rules_list[1][0].clone());
-        assert_eq!(1, selector_map.id_hash.get(&atom!("top")).unwrap()[0].declarations.source_order);
+        assert_eq!(1, selector_map.id_hash.get("top").unwrap()[0].declarations.source_order);
         selector_map.insert(rules_list[0][0].clone());
-        assert_eq!(0, selector_map.class_hash.get(&Atom::from("intro")).unwrap()[0].declarations.source_order);
-        assert!(selector_map.class_hash.get(&Atom::from("foo")).is_none());
+        assert_eq!(0, selector_map.class_hash.get("intro").unwrap()[0].declarations.source_order);
+        assert!(selector_map.class_hash.get("foo").is_none());
     }
 
     #[test]

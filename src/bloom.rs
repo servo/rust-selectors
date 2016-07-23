@@ -4,6 +4,8 @@
 
 //! Simple counting bloom filters.
 
+use fnv::FnvHasher;
+use std::hash::Hasher;
 use string_cache::{Atom, Namespace};
 
 const KEY_SIZE: usize = 12;
@@ -168,6 +170,13 @@ pub trait BloomHash {
     fn bloom_hash(&self) -> u32;
 }
 
+impl BloomHash for u64 {
+    #[inline]
+    fn bloom_hash(&self) -> u32 {
+        ((*self >> 32) ^ *self) as u32
+    }
+}
+
 impl BloomHash for isize {
     #[allow(exceeding_bitshifts)]
     #[inline]
@@ -196,6 +205,15 @@ impl BloomHash for Namespace {
     fn bloom_hash(&self) -> u32 {
         let Namespace(ref atom) = *self;
         atom.bloom_hash()
+    }
+}
+
+impl BloomHash for String {
+    #[inline]
+    fn bloom_hash(&self) -> u32 {
+        let mut h = FnvHasher::default();
+        h.write(self.as_bytes());
+        h.finish().bloom_hash()
     }
 }
 
