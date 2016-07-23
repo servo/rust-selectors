@@ -40,7 +40,7 @@ impl FromCowStr for ::string_cache::Atom {
 
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
-pub trait SelectorImpl {
+pub trait SelectorImpl: Sized {
     type AttrValue: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr;
     type Identifier: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
     type ClassName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
@@ -82,7 +82,7 @@ pub trait SelectorImpl {
         -> Result<Self::PseudoElement, ()> { Err(()) }
 }
 
-pub struct ParserContext<Impl: ?Sized + SelectorImpl> {
+pub struct ParserContext<Impl: SelectorImpl> {
     pub in_user_agent_stylesheet: bool,
     pub default_namespace: Option<Impl::Namespace>,
     pub namespace_prefixes: HashMap<String, Impl::Namespace>,
@@ -166,14 +166,14 @@ pub enum CaseSensitivity {
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-pub struct LocalName<Impl: ?Sized + SelectorImpl> {
+pub struct LocalName<Impl: SelectorImpl> {
     pub name: Impl::LocalName,
     pub lower_name: Impl::LocalName,
 }
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-pub struct AttrSelector<Impl: ?Sized + SelectorImpl> {
+pub struct AttrSelector<Impl: SelectorImpl> {
     pub name: Impl::LocalName,
     pub lower_name: Impl::LocalName,
     pub namespace: NamespaceConstraint<Impl>,
@@ -181,7 +181,7 @@ pub struct AttrSelector<Impl: ?Sized + SelectorImpl> {
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-pub enum NamespaceConstraint<Impl: ?Sized + SelectorImpl> {
+pub enum NamespaceConstraint<Impl: SelectorImpl> {
     Any,
     Specific(Impl::Namespace),
 }
@@ -424,10 +424,9 @@ fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
                 },
             }
         },
-        Ok(Token::Delim('|')) => explicit_namespace(
-            input,
-            NamespaceConstraint::Specific(Default::default())
-        ),
+        Ok(Token::Delim('|')) => {
+            explicit_namespace(input, NamespaceConstraint::Specific(Default::default()))
+        }
         _ => {
             input.reset(position);
             Ok(None)

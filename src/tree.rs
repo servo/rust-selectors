@@ -137,8 +137,8 @@ pub trait Element: MatchAttr + Sized {
     fn next_sibling_element(&self) -> Option<Self>;
 
     fn is_html_element_in_html_document(&self) -> bool;
-    fn get_local_name<'a>(&'a self) -> &<Self::Impl as SelectorImpl>::BorrowedLocalName;
-    fn get_namespace<'a>(&'a self) -> &<Self::Impl as SelectorImpl>::BorrowedNamespace;
+    fn get_local_name(&self) -> &<Self::Impl as SelectorImpl>::BorrowedLocalName;
+    fn get_namespace(&self) -> &<Self::Impl as SelectorImpl>::BorrowedNamespace;
 
     fn match_non_ts_pseudo_class(&self, pc: <Self::Impl as SelectorImpl>::NonTSPseudoClass) -> bool;
 

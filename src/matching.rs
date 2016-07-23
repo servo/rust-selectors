@@ -144,17 +144,17 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         sort_by(&mut matching_rules_list[init_len..], &compare);
     }
 
-    fn get_matching_rules_from_hash<E, S, B: ?Sized, V>(
+    fn get_matching_rules_from_hash<E, Str, BorrowedStr: ?Sized, Vector>(
         element: &E,
         parent_bf: Option<&BloomFilter>,
-        hash: &HashMap<S, Vec<Rule<T, Impl>>>,
-        key: &B,
-        matching_rules: &mut V,
+        hash: &HashMap<Str, Vec<Rule<T, Impl>>>,
+        key: &BorrowedStr,
+        matching_rules: &mut Vector,
         shareable: &mut bool)
     where E: Element<Impl=Impl>,
-          S: Borrow<B> + Eq + Hash,
-          B: Eq + Hash,
-          V: VecLike<DeclarationBlock<T>>
+          Str: Borrow<BorrowedStr> + Eq + Hash,
+          BorrowedStr: Eq + Hash,
+          Vector: VecLike<DeclarationBlock<T>>
     {
         match hash.get(key) {
             Some(rules) => {
@@ -549,7 +549,7 @@ pub fn matches_simple_selector<'a, E>(selector: &SimpleSelector<E::Impl>,
                                       element: &'a E,
                                       shareable: &mut bool)
                                       -> bool
-                                     where E: Element {
+                                      where E: Element {
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
@@ -748,9 +748,9 @@ fn matches_last_child<E>(element: &E) -> bool where E: Element {
     result
 }
 
-fn find_push<T, Impl: SelectorImpl, S: Eq + Hash>(
-    map: &mut HashMap<S, Vec<Rule<T, Impl>>>,
-    key: S,
+fn find_push<T, Impl: SelectorImpl, Str: Eq + Hash>(
+    map: &mut HashMap<Str, Vec<Rule<T, Impl>>>,
+    key: Str,
     value: Rule<T, Impl>
 ) {
     if let Some(vec) = map.get_mut(&key) {
