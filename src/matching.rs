@@ -75,8 +75,9 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                         parent_bf: Option<&BloomFilter>,
                                         matching_rules_list: &mut V,
                                         shareable: &mut bool)
-                                        where E: Element<Impl=Impl>,
-                                              V: VecLike<DeclarationBlock<T>> {
+        where E: Element<Impl=Impl>,
+              V: VecLike<DeclarationBlock<T>>
+    {
         if self.empty {
             return
         }
@@ -127,7 +128,8 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
     /// `self` sorted by specifity and source order.
     pub fn get_universal_rules<V>(&self,
                                   matching_rules_list: &mut V)
-                                  where V: VecLike<DeclarationBlock<T>> {
+        where V: VecLike<DeclarationBlock<T>>
+    {
         if self.empty {
             return
         }
@@ -151,20 +153,17 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         key: &BorrowedStr,
         matching_rules: &mut Vector,
         shareable: &mut bool)
-    where E: Element<Impl=Impl>,
-          Str: Borrow<BorrowedStr> + Eq + Hash,
-          BorrowedStr: Eq + Hash,
-          Vector: VecLike<DeclarationBlock<T>>
+        where E: Element<Impl=Impl>,
+              Str: Borrow<BorrowedStr> + Eq + Hash,
+              BorrowedStr: Eq + Hash,
+              Vector: VecLike<DeclarationBlock<T>>
     {
-        match hash.get(key) {
-            Some(rules) => {
-                SelectorMap::get_matching_rules(element,
-                                                parent_bf,
-                                                rules,
-                                                matching_rules,
-                                                shareable)
-            }
-            None => {}
+        if let Some(rules) = hash.get(key) {
+            SelectorMap::get_matching_rules(element,
+                                            parent_bf,
+                                            rules,
+                                            matching_rules,
+                                            shareable)
         }
     }
 
@@ -174,10 +173,12 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
                                 rules: &[Rule<T, Impl>],
                                 matching_rules: &mut V,
                                 shareable: &mut bool)
-                                where E: Element<Impl=Impl>,
-                                      V: VecLike<DeclarationBlock<T>> {
+        where E: Element<Impl=Impl>,
+              V: VecLike<DeclarationBlock<T>>
+    {
         for rule in rules.iter() {
-            if matches_compound_selector(&*rule.selector, element, parent_bf, shareable) {
+            if matches_compound_selector(&*rule.selector,
+                                         element, parent_bf, shareable) {
                 matching_rules.push(rule.declarations.clone());
             }
         }
@@ -209,47 +210,42 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
     /// Retrieve the first ID name in Rule, or None otherwise.
     fn get_id_name(rule: &Rule<T, Impl>) -> Option<Impl::Identifier> {
-        let simple_selector_sequence = &rule.selector.simple_selectors;
-        for ss in simple_selector_sequence.iter() {
-            match *ss {
-                // TODO(pradeep): Implement case-sensitivity based on the
-                // document type and quirks mode.
-                SimpleSelector::ID(ref id) => return Some(id.clone()),
-                _ => {}
+        for ss in &rule.selector.simple_selectors {
+            // TODO(pradeep): Implement case-sensitivity based on the
+            // document type and quirks mode.
+            if let SimpleSelector::ID(ref id) = *ss {
+                return Some(id.clone());
             }
         }
-        return None
+
+        None
     }
 
     /// Retrieve the FIRST class name in Rule, or None otherwise.
     fn get_class_name(rule: &Rule<T, Impl>) -> Option<Impl::ClassName> {
-        let simple_selector_sequence = &rule.selector.simple_selectors;
-        for ss in simple_selector_sequence.iter() {
-            match *ss {
-                // TODO(pradeep): Implement case-sensitivity based on the
-                // document type and quirks mode.
-                SimpleSelector::Class(ref class) => return Some(class.clone()),
-                _ => {}
+        for ss in &rule.selector.simple_selectors {
+            // TODO(pradeep): Implement case-sensitivity based on the
+            // document type and quirks mode.
+            if let SimpleSelector::Class(ref class) = *ss {
+                return Some(class.clone());
             }
         }
-        return None
+
+        None
     }
 
     /// Retrieve the name if it is a type selector, or None otherwise.
     fn get_local_name(rule: &Rule<T, Impl>) -> Option<LocalName<Impl>> {
-        let simple_selector_sequence = &rule.selector.simple_selectors;
-        for ss in simple_selector_sequence.iter() {
-            match *ss {
-                SimpleSelector::LocalName(ref n) => {
-                    return Some(LocalName {
-                        name: n.name.clone(),
-                        lower_name: n.lower_name.clone(),
-                    })
-                }
-                _ => {}
+        for ss in &rule.selector.simple_selectors {
+            if let SimpleSelector::LocalName(ref n) = *ss {
+                return Some(LocalName {
+                    name: n.name.clone(),
+                    lower_name: n.lower_name.clone(),
+                })
             }
         }
-        return None
+
+        None
     }
 }
 
@@ -349,7 +345,8 @@ pub fn matches_compound_selector<E>(selector: &CompoundSelector<E::Impl>,
                                     parent_bf: Option<&BloomFilter>,
                                     shareable: &mut bool)
                                     -> bool
-                                    where E: Element {
+    where E: Element
+{
     match matches_compound_selector_internal(selector, element, parent_bf, shareable) {
         SelectorMatchingResult::Matched => true,
         _ => false
@@ -414,7 +411,8 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
                       parent_bf: Option<&BloomFilter>,
                       shareable: &mut bool)
                       -> Option<SelectorMatchingResult>
-                      where E: Element {
+    where E: Element
+{
     if !selector.simple_selectors.iter().all(|simple_selector| {
       matches_simple_selector(simple_selector, element, shareable) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
@@ -467,7 +465,7 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
     }
 
     // Can't fast reject.
-    return None;
+    None
 }
 
 fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
@@ -475,7 +473,8 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
                                          parent_bf: Option<&BloomFilter>,
                                          shareable: &mut bool)
                                          -> SelectorMatchingResult
-                                         where E: Element {
+     where E: Element
+{
     if let Some(result) = can_fast_reject(selector, element, parent_bf, shareable) {
         return result;
     }
@@ -546,11 +545,12 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
 /// will almost certainly break as elements will start mistakenly sharing styles. (See
 /// `can_share_style_with` in `servo/components/style/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<'a, E>(selector: &SimpleSelector<E::Impl>,
-                                      element: &'a E,
-                                      shareable: &mut bool)
-                                      -> bool
-                                      where E: Element {
+pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
+                                  element: &E,
+                                  shareable: &mut bool)
+                                  -> bool
+    where E: Element
+{
     match *selector {
         SimpleSelector::LocalName(LocalName { ref name, ref lower_name }) => {
             let name = if element.is_html_element_in_html_document() { lower_name } else { name };
