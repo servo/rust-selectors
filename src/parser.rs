@@ -40,7 +40,7 @@ impl FromCowStr for ::string_cache::Atom {
 
 /// This trait allows to define the parser implementation in regards
 /// of pseudo-classes/elements
-pub trait SelectorImpl: Sized {
+pub trait SelectorImpl: Sized + Debug {
     type AttrValue: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr;
     type Identifier: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
     type ClassName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
@@ -51,10 +51,16 @@ pub trait SelectorImpl: Sized {
     type BorrowedNamespace: ?Sized + Eq;
     type BorrowedLocalName: ?Sized + Eq + Hash;
 
+    /// Declares if the following "attribute exists" selector is considered
+    /// "common" enough to be shareable. If that's not the case, when matching
+    /// over an element, the relation
+    /// AFFECTED_BY_NON_COMMON_STYLE_AFFECTING_ATTRIBUTE would be set.
     fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector<Self>) -> bool {
         false
     }
 
+    /// Declares if the following "equals" attribute selector is considered
+    /// "common" enough to be shareable.
     fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector<Self>,
                                          _value: &Self::AttrValue) -> bool {
         false
@@ -104,6 +110,71 @@ pub struct Selector<Impl: SelectorImpl> {
     pub compound_selectors: Arc<CompoundSelector<Impl>>,
     pub pseudo_element: Option<Impl::PseudoElement>,
     pub specificity: u32,
+}
+
+fn affects_sibling<Impl: SelectorImpl>(simple_selector: &SimpleSelector<Impl>) -> bool {
+    match *simple_selector {
+        SimpleSelector::Negation(ref negated) => {
+            negated.iter().any(|ref selector| affects_sibling(selector))
+        }
+
+        SimpleSelector::FirstChild |
+        SimpleSelector::LastChild |
+        SimpleSelector::OnlyChild |
+        SimpleSelector::NthChild(..) |
+        SimpleSelector::NthLastChild(..) |
+        SimpleSelector::NthOfType(..) |
+        SimpleSelector::NthLastOfType(..) |
+        SimpleSelector::FirstOfType |
+        SimpleSelector::LastOfType |
+        SimpleSelector::OnlyOfType => true,
+
+        _ => false,
+    }
+}
+
+fn matches_non_common_style_affecting_attribute<Impl: SelectorImpl>(simple_selector: &SimpleSelector<Impl>) -> bool {
+    match *simple_selector {
+        SimpleSelector::Negation(ref negated) => {
+            negated.iter().any(|ref selector| matches_non_common_style_affecting_attribute(selector))
+        }
+        SimpleSelector::AttrEqual(ref attr, ref val, _) => {
+            !Impl::attr_equals_selector_is_shareable(attr, val)
+        }
+        SimpleSelector::AttrExists(ref attr) => {
+            !Impl::attr_exists_selector_is_shareable(attr)
+        }
+        SimpleSelector::AttrIncludes(..) |
+        SimpleSelector::AttrDashMatch(..) |
+        SimpleSelector::AttrPrefixMatch(..) |
+        SimpleSelector::AttrSuffixMatch(..) |
+        SimpleSelector::AttrSubstringMatch(..) => true,
+        _ => false,
+    }
+}
+
+impl<Impl: SelectorImpl> Selector<Impl> {
+    /// Whether this selector, if matching on a set of siblings, could affect
+    /// other sibling's style.
+    pub fn affects_siblings(&self) -> bool {
+        match self.compound_selectors.next {
+            Some((_, Combinator::NextSibling)) |
+            Some((_, Combinator::LaterSibling)) => return true,
+            _ => {},
+        }
+
+        match self.compound_selectors.simple_selectors.last() {
+            Some(ref selector) => affects_sibling(selector),
+            None => false,
+        }
+    }
+
+    pub fn matches_non_common_style_affecting_attribute(&self) -> bool {
+        match self.compound_selectors.simple_selectors.last() {
+            Some(ref selector) => matches_non_common_style_affecting_attribute(selector),
+            None => false,
+        }
+    }
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
