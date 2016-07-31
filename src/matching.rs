@@ -371,7 +371,10 @@ bitflags! {
         /// When a child is added or removed from this element, the first and
         /// last children must be restyled, because they may match :first-child,
         /// :last-child, or :only-child.
-        const HAS_EDGE_CHILD_SELECTOR = 1 << 2,
+        ///
+        /// XXX This value is bogus, but there's a servo bug on its handling.
+        /// Will fix after the style cache thing lands.
+        const HAS_EDGE_CHILD_SELECTOR = 0b11,
     }
 }
 
