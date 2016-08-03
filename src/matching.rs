@@ -313,7 +313,7 @@ bitflags! {
     /// This is used to implement efficient sharing.
     pub flags StyleRelations: u16 {
         /// Whether this element has matched any rule that is determined by a
-        /// sibling (i.e., when using the `+` combinator).
+        /// sibling (when using the `+` or `~` combinators).
         const AFFECTED_BY_SIBLINGS = 1 << 0,
 
         /// Whether this element has matched any rule whose matching is
