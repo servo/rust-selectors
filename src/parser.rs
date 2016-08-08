@@ -45,7 +45,7 @@ pub trait SelectorImpl: Sized + Debug {
     type Identifier: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
     type ClassName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
     type LocalName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash
-                    + Borrow<Self::BorrowedLocalName> + for<'a> From<&'a str>;
+                    + Borrow<Self::BorrowedLocalName>;
     type Namespace: Clone + Debug + MaybeHeapSizeOf + Eq + Default + Hash + BloomHash
                     + Borrow<Self::BorrowedNamespace>;
     type BorrowedNamespace: ?Sized + Eq;
@@ -415,7 +415,7 @@ fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input:
             match local_name {
                 Some(name) => {
                     simple_selectors.push(SimpleSelector::LocalName(LocalName {
-                        lower_name: Impl::LocalName::from(&*name.to_ascii_lowercase()),
+                        lower_name: Impl::LocalName::from_cow_str(name.to_ascii_lowercase().into()),
                         name: Impl::LocalName::from_cow_str(name),
                     }))
                 }
@@ -513,7 +513,7 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, i
         Some((_, None)) => unreachable!(),
         Some((namespace, Some(local_name))) => AttrSelector {
             namespace: namespace,
-            lower_name: Impl::LocalName::from(&*local_name.to_ascii_lowercase()),
+            lower_name: Impl::LocalName::from_cow_str(local_name.to_ascii_lowercase().into()),
             name: Impl::LocalName::from_cow_str(local_name),
         },
     };
