@@ -490,6 +490,7 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
                 Combinator::LaterSibling => (true, SelectorMatchingResult::NotMatchedAndRestartFromClosestDescendant),
             };
             let mut next_element = if siblings {
+                *shareable = false;
                 element.prev_sibling_element()
             } else {
                 element.parent_element()
