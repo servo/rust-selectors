@@ -570,13 +570,13 @@ pub fn matches_simple_selector<'a, E>(selector: &SimpleSelector<E::Impl>,
             element.has_class(class)
         }
         SimpleSelector::AttrExists(ref attr) => {
-            if E::Impl::attr_exists_selector_is_shareable(attr) {
+            if !E::Impl::attr_exists_selector_is_shareable(attr) {
                 *shareable = false;
             }
             element.match_attr_has(attr)
         }
         SimpleSelector::AttrEqual(ref attr, ref value, case_sensitivity) => {
-            if E::Impl::attr_equals_selector_is_shareable(attr, value) {
+            if !E::Impl::attr_equals_selector_is_shareable(attr, value) {
                 *shareable = false
             }
             match case_sensitivity {
