@@ -46,9 +46,10 @@ pub trait SelectorImpl: Sized + Debug {
     type ClassName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
     type LocalName: Clone + Debug + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash
                     + Borrow<Self::BorrowedLocalName>;
-    type Namespace: Clone + Debug + MaybeHeapSizeOf + Eq + Default + Hash + BloomHash
-                    + Borrow<Self::BorrowedNamespace>;
-    type BorrowedNamespace: ?Sized + Eq;
+    type NamespaceUrl: Clone + Debug + MaybeHeapSizeOf + Eq + Default + Hash + BloomHash
+                       + Borrow<Self::BorrowedNamespaceUrl>;
+    type NamespacePrefix: Clone + Debug + MaybeHeapSizeOf + Eq + Default + Hash + FromCowStr;
+    type BorrowedNamespaceUrl: ?Sized + Eq;
     type BorrowedLocalName: ?Sized + Eq + Hash;
 
     /// Declares if the following "attribute exists" selector is considered
@@ -90,8 +91,8 @@ pub trait SelectorImpl: Sized + Debug {
 
 pub struct ParserContext<Impl: SelectorImpl> {
     pub in_user_agent_stylesheet: bool,
-    pub default_namespace: Option<Impl::Namespace>,
-    pub namespace_prefixes: HashMap<String, Impl::Namespace>,
+    pub default_namespace: Option<Impl::NamespaceUrl>,
+    pub namespace_prefixes: HashMap<Impl::NamespacePrefix, Impl::NamespaceUrl>,
 }
 
 impl<Impl: SelectorImpl> ParserContext<Impl> {
@@ -199,7 +200,7 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
     ID(Impl::Identifier),
     Class(Impl::ClassName),
     LocalName(LocalName<Impl>),
-    Namespace(Impl::Namespace),
+    Namespace(Namespace<Impl>),
 
     // Attribute selectors
     AttrExists(AttrSelector<Impl>),  // [foo]
@@ -225,7 +226,6 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
     NonTSPseudoClass(Impl::NonTSPseudoClass),
     // ...
 }
-
 
 #[derive(Eq, PartialEq, Clone, Hash, Copy, Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
@@ -254,9 +254,25 @@ pub struct AttrSelector<Impl: SelectorImpl> {
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub enum NamespaceConstraint<Impl: SelectorImpl> {
     Any,
-    Specific(Impl::Namespace),
+    Specific(Namespace<Impl>),
 }
 
+/// FIXME(SimonSapin): should Hash only hash the URL? What is it used for?
+#[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
+pub struct Namespace<Impl: SelectorImpl> {
+    pub prefix: Option<Impl::NamespacePrefix>,
+    pub url: Impl::NamespaceUrl,
+}
+
+impl<Impl: SelectorImpl> Default for Namespace<Impl> {
+    fn default() -> Self {
+        Namespace {
+            prefix: None,
+            url: Impl::NamespaceUrl::default(),  // empty string
+        }
+    }
+}
 
 fn compute_specificity<Impl: SelectorImpl>(mut selector: &CompoundSelector<Impl>,
                                            pseudo_element: &Option<Impl::PseudoElement>) -> u32 {
@@ -443,7 +459,10 @@ fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
                         -> Result<Option<(NamespaceConstraint<Impl>, Option<Cow<'i, str>>)>, ()> {
     let default_namespace = |local_name| {
         let namespace = match context.default_namespace {
-            Some(ref ns) => NamespaceConstraint::Specific(ns.clone()),
+            Some(ref url) => NamespaceConstraint::Specific(Namespace {
+                prefix: None,
+                url: url.clone()
+            }),
             None => NamespaceConstraint::Any,
         };
         Ok(Some((namespace, local_name)))
@@ -467,9 +486,13 @@ fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
             let position = input.position();
             match input.next_including_whitespace() {
                 Ok(Token::Delim('|')) => {
-                    let result = context.namespace_prefixes.get(&*value);
-                    let namespace = try!(result.ok_or(()));
-                    explicit_namespace(input, NamespaceConstraint::Specific(namespace.clone()))
+                    let prefix = Impl::NamespacePrefix::from_cow_str(value);
+                    let result = context.namespace_prefixes.get(&prefix);
+                    let url = try!(result.ok_or(()));
+                    explicit_namespace(input, NamespaceConstraint::Specific(Namespace {
+                        prefix: Some(prefix),
+                        url: url.clone()
+                    }))
                 },
                 _ => {
                     input.reset(position);
@@ -584,7 +607,10 @@ fn parse_negation<Impl: SelectorImpl>(context: &ParserContext<Impl>,
                         // If there was no explicit type selector, but there is
                         // a default namespace, there is an implicit
                         // "<defaultns>|*" type selector before simple_selector.
-                        Some(ref ns) => vec![SimpleSelector::Namespace(ns.clone()), simple_selector],
+                        Some(ref url) => vec![SimpleSelector::Namespace(Namespace {
+                            prefix: None,
+                            url: url.clone()
+                        }), simple_selector],
                         None => vec![simple_selector],
                     };
                     Ok(SimpleSelector::Negation(simple_selectors))
@@ -618,7 +644,10 @@ fn parse_simple_selectors<Impl: SelectorImpl>(context: &ParserContext<Impl>,
                 // If there was no explicit type selector, but there is a
                 // default namespace, there is an implicit "<defaultns>|*" type
                 // selector.
-                Some(ref ns) => vec![SimpleSelector::Namespace(ns.clone())],
+                Some(ref url) => vec![SimpleSelector::Namespace(Namespace {
+                    prefix: None,
+                    url: url.clone()
+                })],
                 None => vec![],
             }
         }
@@ -792,10 +821,11 @@ pub mod tests {
         type AttrValue = String;
         type Identifier = String;
         type ClassName = String;
-        type Namespace = String;
         type LocalName = String;
-        type BorrowedNamespace = str;
+        type NamespaceUrl = String;
+        type NamespacePrefix = String;
         type BorrowedLocalName = str;
+        type BorrowedNamespaceUrl = str;
 
         type NonTSPseudoClass = PseudoClass;
 
@@ -921,7 +951,10 @@ pub mod tests {
                 simple_selectors: vec!(SimpleSelector::AttrExists(AttrSelector {
                     name: String::from("Foo"),
                     lower_name: String::from("foo"),
-                    namespace: NamespaceConstraint::Specific("".into()),
+                    namespace: NamespaceConstraint::Specific(Namespace {
+                        prefix: None,
+                        url: "".into(),
+                    }),
                 })),
                 next: None,
             }),
@@ -936,11 +969,17 @@ pub mod tests {
         assert_eq!(parse_ns("[Foo]", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec![
-                    SimpleSelector::Namespace(MATHML.into()),
+                    SimpleSelector::Namespace(Namespace {
+                        prefix: None,
+                        url: MATHML.into(),
+                    }),
                     SimpleSelector::AttrExists(AttrSelector {
                         name: String::from("Foo"),
                         lower_name: String::from("foo"),
-                        namespace: NamespaceConstraint::Specific("".into()),
+                        namespace: NamespaceConstraint::Specific(Namespace {
+                            prefix: None,
+                            url: "".into(),
+                        }),
                     }),
                 ],
                 next: None,
@@ -952,7 +991,10 @@ pub mod tests {
         assert_eq!(parse_ns("e", &context), Ok(vec!(Selector {
             compound_selectors: Arc::new(CompoundSelector {
                 simple_selectors: vec!(
-                    SimpleSelector::Namespace(MATHML.into()),
+                    SimpleSelector::Namespace(Namespace {
+                        prefix: None,
+                        url: MATHML.into(),
+                    }),
                     SimpleSelector::LocalName(LocalName {
                         name: String::from("e"),
                         lower_name: String::from("e") }),
@@ -968,7 +1010,10 @@ pub mod tests {
                     SimpleSelector::AttrDashMatch(AttrSelector {
                         name: String::from("attr"),
                         lower_name: String::from("attr"),
-                        namespace: NamespaceConstraint::Specific("".into()),
+                        namespace: NamespaceConstraint::Specific(Namespace {
+                            prefix: None,
+                            url: "".into(),
+                        }),
                     }, "foo".to_owned())
                 ],
                 next: None,

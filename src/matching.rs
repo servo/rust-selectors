@@ -503,7 +503,7 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
                     }
                 },
                 SimpleSelector::Namespace(ref namespace) => {
-                    if !bf.might_contain(namespace) {
+                    if !bf.might_contain(&namespace.url) {
                         return Some(SelectorMatchingResult::NotMatchedGlobally);
                     }
                 },
@@ -624,7 +624,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.get_local_name() == name.borrow()
         }
         SimpleSelector::Namespace(ref namespace) => {
-            element.get_namespace() == namespace.borrow()
+            element.get_namespace() == namespace.url.borrow()
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
