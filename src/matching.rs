@@ -34,6 +34,7 @@ use HashMap;
 /// Hence, the union of the rules keyed on each of element's classes, ID,
 /// element name, etc. will contain the Rules that actually match that
 /// element.
+#[derive(Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct SelectorMap<T, Impl: SelectorImpl> {
     // TODO: Tune the initial capacity of the HashMap
@@ -254,6 +255,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 // rapidly increase.
 pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: usize = 4096;
 
+#[derive(Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct Rule<T, Impl: SelectorImpl> {
     // This is an Arc because Rule will essentially be cloned for every element
