@@ -34,6 +34,7 @@ use HashMap;
 /// Hence, the union of the rules keyed on each of element's classes, ID,
 /// element name, etc. will contain the Rules that actually match that
 /// element.
+#[derive(Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct SelectorMap<T, Impl: SelectorImpl> {
     // TODO: Tune the initial capacity of the HashMap
@@ -254,6 +255,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 // rapidly increase.
 pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: usize = 4096;
 
+#[derive(Debug)]
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct Rule<T, Impl: SelectorImpl> {
     // This is an Arc because Rule will essentially be cloned for every element
@@ -503,7 +505,7 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
                     }
                 },
                 SimpleSelector::Namespace(ref namespace) => {
-                    if !bf.might_contain(namespace) {
+                    if !bf.might_contain(&namespace.url) {
                         return Some(SelectorMatchingResult::NotMatchedGlobally);
                     }
                 },
@@ -624,7 +626,7 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
             element.get_local_name() == name.borrow()
         }
         SimpleSelector::Namespace(ref namespace) => {
-            element.get_namespace() == namespace.borrow()
+            element.get_namespace() == namespace.url.borrow()
         }
         // TODO: case-sensitivity depends on the document type and quirks mode
         SimpleSelector::ID(ref id) => {
