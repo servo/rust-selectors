@@ -186,7 +186,7 @@ pub struct CompoundSelector<Impl: SelectorImpl> {
 }
 
 #[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Combinator {
     Child,  //  >
     Descendant,  // space
@@ -295,6 +295,9 @@ impl<Impl: SelectorImpl> Debug for AttrSelector<Impl> {
 impl<Impl: SelectorImpl> Debug for Namespace<Impl> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.to_css(f) }
 }
+impl<Impl: SelectorImpl> Debug for LocalName<Impl> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.to_css(f) }
+}
 
 impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
@@ -342,7 +345,7 @@ impl<Impl: SelectorImpl> ToCss for SimpleSelector<Impl> {
                 try!(dest.write_char('.'));
                 display_to_css_identifier(s, dest)
             }
-            LocalName(ref s) => display_to_css_identifier(&s.name, dest),
+            LocalName(ref s) => s.to_css(dest),
             Namespace(ref ns) => ns.to_css(dest),
 
             // Attribute selectors
@@ -409,6 +412,12 @@ impl<Impl: SelectorImpl> ToCss for Namespace<Impl> {
             try!(dest.write_char('|'));
         }
         Ok(())
+    }
+}
+
+impl<Impl: SelectorImpl> ToCss for LocalName<Impl> {
+    fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
+        display_to_css_identifier(&self.name, dest)
     }
 }
 
