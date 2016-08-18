@@ -10,7 +10,7 @@ use bloom::BloomFilter;
 use smallvec::VecLike;
 use quickersort::sort_by;
 
-use parser::{CaseSensitivity, Combinator, CompoundSelector, LocalName};
+use parser::{CaseSensitivity, Combinator, ComplexSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 use HashMap;
@@ -138,7 +138,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
         let init_len = matching_rules_list.len();
 
         for rule in self.other_rules.iter() {
-            if rule.selector.simple_selectors.is_empty() &&
+            if rule.selector.compound_selector.is_empty() &&
                rule.selector.next.is_none() {
                 matching_rules_list.push(rule.declarations.clone());
             }
@@ -178,8 +178,8 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
               V: VecLike<DeclarationBlock<T>>
     {
         for rule in rules.iter() {
-            if matches_compound_selector(&*rule.selector,
-                                         element, parent_bf, relations) {
+            if matches_complex_selector(&*rule.selector,
+                                        element, parent_bf, relations) {
                 matching_rules.push(rule.declarations.clone());
             }
         }
@@ -211,7 +211,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
     /// Retrieve the first ID name in Rule, or None otherwise.
     fn get_id_name(rule: &Rule<T, Impl>) -> Option<Impl::Identifier> {
-        for ss in &rule.selector.simple_selectors {
+        for ss in &rule.selector.compound_selector {
             // TODO(pradeep): Implement case-sensitivity based on the
             // document type and quirks mode.
             if let SimpleSelector::ID(ref id) = *ss {
@@ -224,7 +224,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
     /// Retrieve the FIRST class name in Rule, or None otherwise.
     fn get_class_name(rule: &Rule<T, Impl>) -> Option<Impl::ClassName> {
-        for ss in &rule.selector.simple_selectors {
+        for ss in &rule.selector.compound_selector {
             // TODO(pradeep): Implement case-sensitivity based on the
             // document type and quirks mode.
             if let SimpleSelector::Class(ref class) = *ss {
@@ -237,7 +237,7 @@ impl<T, Impl: SelectorImpl> SelectorMap<T, Impl> {
 
     /// Retrieve the name if it is a type selector, or None otherwise.
     fn get_local_name(rule: &Rule<T, Impl>) -> Option<LocalName<Impl>> {
-        for ss in &rule.selector.simple_selectors {
+        for ss in &rule.selector.compound_selector {
             if let SimpleSelector::LocalName(ref n) = *ss {
                 return Some(LocalName {
                     name: n.name.clone(),
@@ -260,8 +260,8 @@ pub static RECOMMENDED_SELECTOR_BLOOM_FILTER_SIZE: usize = 4096;
 pub struct Rule<T, Impl: SelectorImpl> {
     // This is an Arc because Rule will essentially be cloned for every element
     // that it matches. Selector contains an owned vector (through
-    // CompoundSelector) and we want to avoid the allocation.
-    pub selector: Arc<CompoundSelector<Impl>>,
+    // ComplexSelector) and we want to avoid the allocation.
+    pub selector: Arc<ComplexSelector<Impl>>,
     pub declarations: DeclarationBlock<T>,
 }
 
@@ -383,24 +383,24 @@ pub fn matches<E>(selector_list: &[Selector<E::Impl>],
                   where E: Element {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
-        matches_compound_selector(&*selector.compound_selectors, element, parent_bf, &mut StyleRelations::empty())
+        matches_complex_selector(&*selector.complex_selector, element, parent_bf, &mut StyleRelations::empty())
     })
 }
 
-/// Determines whether the given element matches the given single or compound selector.
+/// Determines whether the given element matches the given complex selector.
 ///
 /// NB: If you add support for any new kinds of selectors to this routine, be sure to set
 /// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
 /// will almost certainly break as elements will start mistakenly sharing styles. (See
 /// `can_share_style_with` in `servo/components/style/matching.rs`.)
-pub fn matches_compound_selector<E>(selector: &CompoundSelector<E::Impl>,
-                                    element: &E,
-                                    parent_bf: Option<&BloomFilter>,
-                                    relations: &mut StyleRelations)
-                                    -> bool
+pub fn matches_complex_selector<E>(selector: &ComplexSelector<E::Impl>,
+                                   element: &E,
+                                   parent_bf: Option<&BloomFilter>,
+                                   relations: &mut StyleRelations)
+                                   -> bool
     where E: Element
 {
-    match matches_compound_selector_internal(selector, element, parent_bf, relations) {
+    match matches_complex_selector_internal(selector, element, parent_bf, relations) {
         SelectorMatchingResult::Matched => {
             match selector.next {
                 Some((_, Combinator::NextSibling)) |
@@ -464,18 +464,18 @@ enum SelectorMatchingResult {
     NotMatchedGlobally,
 }
 
-/// Quickly figures out whether or not the compound selector is worth doing more
+/// Quickly figures out whether or not the complex selector is worth doing more
 /// work on. If the simple selectors don't match, or there's a child selector
 /// that does not appear in the bloom parent bloom filter, we can exit early.
-fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
+fn can_fast_reject<E>(mut selector: &ComplexSelector<E::Impl>,
                       element: &E,
                       parent_bf: Option<&BloomFilter>,
                       relations: &mut StyleRelations)
                       -> Option<SelectorMatchingResult>
     where E: Element
 {
-    if !selector.simple_selectors.iter().all(|simple_selector| {
-      matches_simple_selector(simple_selector, element, relations) }) {
+    if !selector.compound_selector.iter().all(|simple_selector| {
+      matches_simple_selector(simple_selector, element, parent_bf, relations) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
     }
 
@@ -496,7 +496,7 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
              }
          };
 
-        for ss in selector.simple_selectors.iter() {
+        for ss in selector.compound_selector.iter() {
             match *ss {
                 SimpleSelector::LocalName(LocalName { ref name, ref lower_name })  => {
                     if !bf.might_contain(name)
@@ -528,7 +528,7 @@ fn can_fast_reject<E>(mut selector: &CompoundSelector<E::Impl>,
     None
 }
 
-fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
+fn matches_complex_selector_internal<E>(selector: &ComplexSelector<E::Impl>,
                                          element: &E,
                                          parent_bf: Option<&BloomFilter>,
                                          relations: &mut StyleRelations)
@@ -558,7 +558,7 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
                     None => return candidate_not_found,
                     Some(next_element) => next_element,
                 };
-                let result = matches_compound_selector_internal(&**next_selector,
+                let result = matches_complex_selector_internal(&**next_selector,
                                                                 &element,
                                                                 parent_bf,
                                                                 relations);
@@ -604,9 +604,12 @@ fn matches_compound_selector_internal<E>(selector: &CompoundSelector<E::Impl>,
 /// will almost certainly break as elements will start mistakenly sharing styles. (See
 /// `can_share_style_with` in `servo/components/style/matching.rs`.)
 #[inline]
-pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
-                                  element: &E,
-                                  relations: &mut StyleRelations) -> bool
+fn matches_simple_selector<E>(
+        selector: &SimpleSelector<E::Impl>,
+        element: &E,
+        parent_bf: Option<&BloomFilter>,
+        relations: &mut StyleRelations)
+        -> bool
     where E: Element
 {
     macro_rules! relation_if {
@@ -728,7 +731,9 @@ pub fn matches_simple_selector<E>(selector: &SimpleSelector<E::Impl>,
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::Negation(ref negated) => {
-            negated.iter().any(|s| !matches_simple_selector(s, element, relations))
+            !negated.iter().all(|s| {
+                matches_complex_selector(s, element, parent_bf, relations)
+            })
         }
     }
 }
@@ -852,7 +857,7 @@ mod tests {
             parse_selector_list(&context, &mut Parser::new(*selectors))
             .unwrap().into_iter().map(|s| {
                 Rule {
-                    selector: s.compound_selectors.clone(),
+                    selector: s.complex_selector.clone(),
                     declarations: DeclarationBlock {
                         specificity: s.specificity,
                         declarations: Arc::new(()),
