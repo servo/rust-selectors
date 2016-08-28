@@ -11,8 +11,6 @@
 #[macro_use] extern crate cssparser;
 #[macro_use] extern crate matches;
 #[macro_use] extern crate string_cache;
-extern crate quickersort;
-extern crate smallvec;
 extern crate fnv;
 
 pub mod bloom;
