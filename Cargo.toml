@@ -18,7 +18,7 @@ heap_size = ["string_cache/heap_size", "heapsize", "heapsize_plugin"]
 [dependencies]
 bitflags = "0.7"
 matches = "0.1"
-cssparser = "0.5"
+cssparser = "0.6"
 fnv = "1.0"
 string_cache = "0.2.16"
 heapsize = {version = "0.3", features = ["unstable"], optional = true}
