@@ -90,6 +90,10 @@ bitflags! {
         /// last children must be restyled, because they may match :first-child,
         /// :last-child, or :only-child.
         const HAS_EDGE_CHILD_SELECTOR = 1 << 2,
+
+        /// The element has an empty selector, so when a child is appended we
+        /// might need to restyle the parent completely.
+        const HAS_EMPTY_SELECTOR = 1 << 3,
     }
 }
 
@@ -423,6 +427,9 @@ fn matches_simple_selector<E>(
             element.is_root()
         }
         SimpleSelector::Empty => {
+            if reason.for_styling() {
+                element.insert_flags(HAS_EMPTY_SELECTOR);
+            }
             relation_if!(element.is_empty(), AFFECTED_BY_EMPTY)
         }
         SimpleSelector::NthChild(a, b) => {
