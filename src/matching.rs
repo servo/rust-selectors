@@ -40,8 +40,6 @@ bitflags! {
         /// Whether this element has matched any rule whose matching is
         /// determined by its position in the tree (i.e., first-child,
         /// nth-child, etc.).
-        ///
-        /// XXX improve this description and name, "position" is too generic.
         const AFFECTED_BY_CHILD_INDEX = 1 << 1,
 
         /// Whether this flag is affected by any state (i.e., non
@@ -73,7 +71,7 @@ bitflags! {
 
 bitflags! {
     /// Set of flags that are set on the parent depending on whether a child
-    /// matches a selector.
+    /// could potentially match a selector.
     ///
     /// These setters, in the case of Servo, must be atomic, due to the parallel
     /// traversal.
@@ -100,7 +98,8 @@ pub fn matches<E>(selector_list: &[Selector<E::Impl>],
                   parent_bf: Option<&BloomFilter>,
                   reason: MatchingReason)
                   -> bool
-                  where E: Element {
+    where E: Element
+{
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
         matches_complex_selector(&*selector.complex_selector, element, parent_bf, &mut StyleRelations::empty(), reason)
@@ -410,13 +409,13 @@ fn matches_simple_selector<E>(
                          AFFECTED_BY_STATE)
         }
         SimpleSelector::FirstChild => {
-            relation_if!(matches_first_child(element), AFFECTED_BY_CHILD_INDEX)
+            relation_if!(matches_first_child(element, reason), AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::LastChild => {
-            relation_if!(matches_last_child(element), AFFECTED_BY_CHILD_INDEX)
+            relation_if!(matches_last_child(element, reason), AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::OnlyChild => {
-            relation_if!(matches_first_child(element) && matches_last_child(element), AFFECTED_BY_CHILD_INDEX)
+            relation_if!(matches_first_child(element, reason) && matches_last_child(element, reason), AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::Root => {
             // We never share styles with an element with no parent, so no point
@@ -427,32 +426,32 @@ fn matches_simple_selector<E>(
             relation_if!(element.is_empty(), AFFECTED_BY_EMPTY)
         }
         SimpleSelector::NthChild(a, b) => {
-            relation_if!(matches_generic_nth_child(element, a, b, false, false),
+            relation_if!(matches_generic_nth_child(element, a, b, false, false, reason),
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::NthLastChild(a, b) => {
-            relation_if!(matches_generic_nth_child(element, a, b, false, true),
+            relation_if!(matches_generic_nth_child(element, a, b, false, true, reason),
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::NthOfType(a, b) => {
-            relation_if!(matches_generic_nth_child(element, a, b, true, false),
+            relation_if!(matches_generic_nth_child(element, a, b, true, false, reason),
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::NthLastOfType(a, b) => {
-            relation_if!(matches_generic_nth_child(element, a, b, true, true),
+            relation_if!(matches_generic_nth_child(element, a, b, true, true, reason),
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::FirstOfType => {
-            relation_if!(matches_generic_nth_child(element, 0, 1, true, false),
+            relation_if!(matches_generic_nth_child(element, 0, 1, true, false, reason),
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::LastOfType => {
-            relation_if!(matches_generic_nth_child(element, 0, 1, true, true),
+            relation_if!(matches_generic_nth_child(element, 0, 1, true, true, reason),
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::OnlyOfType => {
-            relation_if!(matches_generic_nth_child(element, 0, 1, true, false) &&
-                         matches_generic_nth_child(element, 0, 1, true, true),
+            relation_if!(matches_generic_nth_child(element, 0, 1, true, false, reason) &&
+                         matches_generic_nth_child(element, 0, 1, true, true, reason),
                          AFFECTED_BY_CHILD_INDEX)
         }
         SimpleSelector::Negation(ref negated) => {
@@ -468,12 +467,23 @@ fn matches_generic_nth_child<E>(element: &E,
                                 a: i32,
                                 b: i32,
                                 is_of_type: bool,
-                                is_from_end: bool) -> bool
+                                is_from_end: bool,
+                                reason: MatchingReason) -> bool
     where E: Element
 {
     // Selectors Level 4 changed from Level 3:
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
+
+    if reason.for_styling() {
+        if let Some(parent) = element.parent_element() {
+            parent.insert_flags(if is_from_end {
+                HAS_SLOW_SELECTOR
+            } else {
+                HAS_SLOW_SELECTOR_LATER_SIBLINGS
+            });
+        }
+    }
 
     let mut index = 1;
     let mut next_sibling = if is_from_end {
@@ -503,50 +513,37 @@ fn matches_generic_nth_child<E>(element: &E,
         };
     }
 
-    let result = if a == 0 {
+    if a == 0 {
         b == index
     } else {
         (index - b) / a >= 0 &&
         (index - b) % a == 0
-    };
-
-    if result {
-        if let Some(parent) = element.parent_element() {
-            parent.insert_flags(if is_from_end {
-                HAS_SLOW_SELECTOR
-            } else {
-                HAS_SLOW_SELECTOR_LATER_SIBLINGS
-            });
-        }
     }
-
-    result
 }
 
 #[inline]
-fn matches_first_child<E>(element: &E) -> bool where E: Element {
+fn matches_first_child<E>(element: &E, reason: MatchingReason) -> bool where E: Element {
     // Selectors Level 4 changed from Level 3:
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
-    let result = element.prev_sibling_element().is_none();
-    if result {
+    if reason.for_styling() {
         if let Some(parent) = element.parent_element() {
             parent.insert_flags(HAS_EDGE_CHILD_SELECTOR);
         }
     }
-    result
+    element.prev_sibling_element().is_none()
 }
 
 #[inline]
-fn matches_last_child<E>(element: &E) -> bool where E: Element {
+fn matches_last_child<E>(element: &E, reason: MatchingReason) -> bool where E: Element {
     // Selectors Level 4 changed from Level 3:
     // This can match without a parent element:
     // https://drafts.csswg.org/selectors-4/#child-index
-    let result = element.next_sibling_element().is_none();
-    if result {
+    if reason.for_styling() {
         if let Some(parent) = element.parent_element() {
             parent.insert_flags(HAS_EDGE_CHILD_SELECTOR);
         }
     }
-    result
+
+    element.next_sibling_element().is_none()
 }
