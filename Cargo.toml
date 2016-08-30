@@ -1,7 +1,7 @@
 [package]
 
 name = "selectors"
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Simon Sapin <simon.sapin@exyr.org>", "Alan Jeffrey <ajeffrey@mozilla.com>"]
 documentation = "http://doc.servo.org/selectors/"
 
