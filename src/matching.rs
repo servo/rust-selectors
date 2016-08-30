@@ -9,6 +9,19 @@ use parser::{CaseSensitivity, Combinator, ComplexSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum MatchingReason {
+    ForStyling,
+    Other,
+}
+
+impl MatchingReason {
+    #[inline]
+    fn for_styling(&self) -> bool {
+        *self == MatchingReason::ForStyling
+    }
+}
+
 // The bloom filter for descendant CSS selectors will have a <1% false
 // positive rate until it has this many selectors in it, then it will
 // rapidly increase.
@@ -84,12 +97,13 @@ bitflags! {
 
 pub fn matches<E>(selector_list: &[Selector<E::Impl>],
                   element: &E,
-                  parent_bf: Option<&BloomFilter>)
+                  parent_bf: Option<&BloomFilter>,
+                  reason: MatchingReason)
                   -> bool
                   where E: Element {
     selector_list.iter().any(|selector| {
         selector.pseudo_element.is_none() &&
-        matches_complex_selector(&*selector.complex_selector, element, parent_bf, &mut StyleRelations::empty())
+        matches_complex_selector(&*selector.complex_selector, element, parent_bf, &mut StyleRelations::empty(), reason)
     })
 }
 
@@ -97,22 +111,24 @@ pub fn matches<E>(selector_list: &[Selector<E::Impl>],
 pub fn matches_complex_selector<E>(selector: &ComplexSelector<E::Impl>,
                                    element: &E,
                                    parent_bf: Option<&BloomFilter>,
-                                   relations: &mut StyleRelations)
+                                   relations: &mut StyleRelations,
+                                   reason: MatchingReason)
                                    -> bool
     where E: Element
 {
-    really_matches_complex_selector(selector, element, parent_bf, relations, true)
+    really_matches_complex_selector(selector, element, parent_bf, relations, true, reason)
 }
 
 fn really_matches_complex_selector<E>(selector: &ComplexSelector<E::Impl>,
                                       element: &E,
                                       parent_bf: Option<&BloomFilter>,
                                       relations: &mut StyleRelations,
-                                      is_rightmost_selector: bool)
+                                      is_rightmost_selector: bool,
+                                      reason: MatchingReason)
                                       -> bool
     where E: Element
 {
-    match matches_complex_selector_internal(selector, element, parent_bf, relations, is_rightmost_selector) {
+    match matches_complex_selector_internal(selector, element, parent_bf, relations, is_rightmost_selector, reason) {
         SelectorMatchingResult::Matched => {
             match selector.next {
                 Some((_, Combinator::NextSibling)) |
@@ -183,12 +199,13 @@ fn can_fast_reject<E>(mut selector: &ComplexSelector<E::Impl>,
                       element: &E,
                       parent_bf: Option<&BloomFilter>,
                       relations: &mut StyleRelations,
-                      is_rightmost_selector: bool)
+                      is_rightmost_selector: bool,
+                      reason: MatchingReason)
                       -> Option<SelectorMatchingResult>
     where E: Element
 {
     if !selector.compound_selector.iter().all(|simple_selector| {
-      matches_simple_selector(simple_selector, element, parent_bf, relations, is_rightmost_selector) }) {
+      matches_simple_selector(simple_selector, element, parent_bf, relations, is_rightmost_selector, reason) }) {
         return Some(SelectorMatchingResult::NotMatchedAndRestartFromClosestLaterSibling);
     }
 
@@ -245,11 +262,12 @@ fn matches_complex_selector_internal<E>(selector: &ComplexSelector<E::Impl>,
                                          element: &E,
                                          parent_bf: Option<&BloomFilter>,
                                          relations: &mut StyleRelations,
-                                         is_rightmost_selector: bool)
+                                         is_rightmost_selector: bool,
+                                         reason: MatchingReason)
                                          -> SelectorMatchingResult
      where E: Element
 {
-    if let Some(result) = can_fast_reject(selector, element, parent_bf, relations, is_rightmost_selector) {
+    if let Some(result) = can_fast_reject(selector, element, parent_bf, relations, is_rightmost_selector, reason) {
         return result;
     }
 
@@ -276,7 +294,8 @@ fn matches_complex_selector_internal<E>(selector: &ComplexSelector<E::Impl>,
                                                                 &element,
                                                                 parent_bf,
                                                                 relations,
-                                                                false);
+                                                                false,
+                                                                reason);
                 match (result, combinator) {
                     // Return the status immediately.
                     (SelectorMatchingResult::Matched, _) => return result,
@@ -324,7 +343,8 @@ fn matches_simple_selector<E>(
         element: &E,
         parent_bf: Option<&BloomFilter>,
         relations: &mut StyleRelations,
-        is_rightmost_selector: bool)
+        is_rightmost_selector: bool,
+        reason: MatchingReason)
         -> bool
     where E: Element
 {
@@ -450,7 +470,7 @@ fn matches_simple_selector<E>(
         }
         SimpleSelector::Negation(ref negated) => {
             !negated.iter().all(|s| {
-                really_matches_complex_selector(s, element, parent_bf, relations, is_rightmost_selector)
+                really_matches_complex_selector(s, element, parent_bf, relations, is_rightmost_selector, reason)
             })
         }
     }
