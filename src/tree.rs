@@ -166,7 +166,13 @@ pub trait Element: MatchAttr + Sized {
 
     /// Add flags to the element. See the `ElementFlags` docs for details.
     ///
-    /// This may be called while the element *or one of its children* is being matched. Therefore
-    /// the implementation must be thread-safe if children may be matched in parallel.
+    /// This may be called while the element *or one of its children* is being
+    /// matched. Therefore the implementation must be thread-safe if children
+    /// may be matched in parallel.
     fn insert_flags(&self, _flags: ElementFlags) {}
+
+    /// Clears the relevant ElementFlags. This is *not* called from
+    /// rust-selectors, but provided as part of the Element interface since it
+    /// makes sense.
+    fn clear_flags(&self) {}
 }
