@@ -9,6 +9,14 @@ use parser::{CaseSensitivity, Combinator, ComplexSelector, LocalName};
 use parser::{SimpleSelector, Selector, SelectorImpl};
 use tree::Element;
 
+/// The reason why we're doing selector matching.
+///
+/// If this is for styling, this will include the flags in the parent element.
+///
+/// This is done because Servo doesn't need those flags at all when it's not
+/// styling (e.g., when you're doing document.querySelector). For example, a
+/// slow selector in an API like querySelector doesn't imply that the parent
+/// could match it.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MatchingReason {
     ForStyling,
