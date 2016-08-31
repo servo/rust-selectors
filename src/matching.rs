@@ -333,11 +333,6 @@ fn matches_complex_selector_internal<E>(selector: &ComplexSelector<E::Impl>,
 }
 
 /// Determines whether the given element matches the given single selector.
-///
-/// NB: If you add support for any new kinds of selectors to this routine, be sure to set
-/// `shareable` to false unless you are willing to update the style sharing logic. Otherwise things
-/// will almost certainly break as elements will start mistakenly sharing styles. (See
-/// `can_share_style_with` in `servo/components/style/matching.rs`.)
 #[inline]
 fn matches_simple_selector<E>(
         selector: &SimpleSelector<E::Impl>,
