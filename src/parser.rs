@@ -32,27 +32,27 @@ impl FromCowStr for ::string_cache::Atom {
 }
 
 macro_rules! with_bounds {
-    ($( $HeapSizeOf: tt )*) => {
+    ($( $CommonBounds: tt )*) => {
         /// This trait allows to define the parser implementation in regards
         /// of pseudo-classes/elements
         pub trait SelectorImpl: Sized + Debug {
-            type AttrValue: Clone + Display + Eq + FromCowStr + Hash $($HeapSizeOf)*;
-            type Identifier: Clone + Display + Eq + FromCowStr + Hash + BloomHash $($HeapSizeOf)*;
-            type ClassName: Clone + Display + Eq + FromCowStr + Hash + BloomHash $($HeapSizeOf)*;
-            type LocalName: Clone + Display + Eq + FromCowStr + Hash + BloomHash $($HeapSizeOf)*
+            type AttrValue: $($CommonBounds)* + Display + FromCowStr;
+            type Identifier: $($CommonBounds)* + Display + FromCowStr + BloomHash;
+            type ClassName: $($CommonBounds)* + Display + FromCowStr + BloomHash;
+            type LocalName: $($CommonBounds)* + Display + FromCowStr + BloomHash
                             + Borrow<Self::BorrowedLocalName>;
-            type NamespaceUrl: Clone + Display + Eq + Default + Hash + BloomHash $($HeapSizeOf)*
+            type NamespaceUrl: $($CommonBounds)* + Display + Default + BloomHash
                                + Borrow<Self::BorrowedNamespaceUrl>;
-            type NamespacePrefix: Clone + Display + Eq + Default + Hash + FromCowStr $($HeapSizeOf)*;
+            type NamespacePrefix: $($CommonBounds)* + Display + Default + FromCowStr;
             type BorrowedNamespaceUrl: ?Sized + Eq;
             type BorrowedLocalName: ?Sized + Eq + Hash;
 
             /// non tree-structural pseudo-classes
             /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
-            type NonTSPseudoClass: Clone + Eq + Hash + PartialEq + Sized + ToCss $($HeapSizeOf)*;
+            type NonTSPseudoClass: $($CommonBounds)* + Sized + ToCss;
 
             /// pseudo-elements
-            type PseudoElement: Sized + PartialEq + Eq + Clone + Hash + ToCss $($HeapSizeOf)*;
+            type PseudoElement: $($CommonBounds)* + Sized + ToCss;
 
             /// Declares if the following "attribute exists" selector is considered
             /// "common" enough to be shareable. If that's not the case, when matching
@@ -86,11 +86,17 @@ macro_rules! with_bounds {
     }
 }
 
+macro_rules! with_heap_size_bound {
+    ($( $HeapSizeOf: tt )*) => {
+        with_bounds!(Clone + Eq + Hash $($HeapSizeOf)*);
+    }
+}
+
 #[cfg(feature = "heap_size")]
-with_bounds!(+ ::heapsize::HeapSizeOf);
+with_heap_size_bound!(+ ::heapsize::HeapSizeOf);
 
 #[cfg(not(feature = "heap_size"))]
-with_bounds!();
+with_heap_size_bound!();
 
 pub struct ParserContext<Impl: SelectorImpl> {
     pub in_user_agent_stylesheet: bool,
