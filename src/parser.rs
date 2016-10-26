@@ -14,36 +14,36 @@ use std::sync::Arc;
 
 use HashMap;
 
-/// Although it could, String does not implement From<Cow<str>>
-pub trait FromCowStr {
-    fn from_cow_str(s: Cow<str>) -> Self;
-}
-
-impl FromCowStr for String {
-    fn from_cow_str(s: Cow<str>) -> Self {
-        s.into_owned()
-    }
-}
-
-impl FromCowStr for ::string_cache::Atom {
-    fn from_cow_str(s: Cow<str>) -> Self {
-        s.into()
-    }
-}
-
 macro_rules! with_bounds {
-    ($( $CommonBounds: tt )*) => {
+    ( [ $( $CommonBounds: tt )* ] [ $( $FromStr: tt )* ]) => {
+        fn from_cow_str<T>(cow: Cow<str>) -> T where T: $($FromStr)* {
+            match cow {
+                Cow::Borrowed(s) => T::from(s),
+                Cow::Owned(s) => T::from(s),
+            }
+        }
+
+        fn from_ascii_lowercase<T>(s: &str) -> T where T: $($FromStr)* {
+            if let Some(first_uppercase) = s.bytes().position(|byte| byte >= b'A' && byte <= b'Z') {
+                let mut string = s.to_owned();
+                string[first_uppercase..].make_ascii_lowercase();
+                T::from(string)
+            } else {
+                T::from(s)
+            }
+        }
+
         /// This trait allows to define the parser implementation in regards
         /// of pseudo-classes/elements
         pub trait SelectorImpl: Sized + Debug {
-            type AttrValue: $($CommonBounds)* + Display + FromCowStr;
-            type Identifier: $($CommonBounds)* + Display + FromCowStr + BloomHash;
-            type ClassName: $($CommonBounds)* + Display + FromCowStr + BloomHash;
-            type LocalName: $($CommonBounds)* + Display + FromCowStr + BloomHash
+            type AttrValue: $($CommonBounds)* + $($FromStr)* + Display;
+            type Identifier: $($CommonBounds)* + $($FromStr)* + Display + BloomHash;
+            type ClassName: $($CommonBounds)* + $($FromStr)* + Display + BloomHash;
+            type LocalName: $($CommonBounds)* + $($FromStr)* + Display + BloomHash
                             + Borrow<Self::BorrowedLocalName>;
             type NamespaceUrl: $($CommonBounds)* + Display + Default + BloomHash
                                + Borrow<Self::BorrowedNamespaceUrl>;
-            type NamespacePrefix: $($CommonBounds)* + Display + Default + FromCowStr;
+            type NamespacePrefix: $($CommonBounds)* + $($FromStr)* + Display + Default;
             type BorrowedNamespaceUrl: ?Sized + Eq;
             type BorrowedLocalName: ?Sized + Eq + Hash;
 
@@ -88,7 +88,10 @@ macro_rules! with_bounds {
 
 macro_rules! with_heap_size_bound {
     ($( $HeapSizeOf: tt )*) => {
-        with_bounds!(Clone + Eq + Hash $($HeapSizeOf)*);
+        with_bounds! {
+            [Clone + Eq + Hash $($HeapSizeOf)*]
+            [From<String> + for<'a> From<&'a str>]
+        }
     }
 }
 
@@ -722,8 +725,8 @@ fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input:
             match local_name {
                 Some(name) => {
                     compound_selector.push(SimpleSelector::LocalName(LocalName {
-                        lower_name: Impl::LocalName::from_cow_str(name.to_ascii_lowercase().into()),
-                        name: Impl::LocalName::from_cow_str(name),
+                        lower_name: from_ascii_lowercase(&name),
+                        name: from_cow_str(name),
                     }))
                 }
                 None => (),
@@ -777,7 +780,7 @@ fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
             let position = input.position();
             match input.next_including_whitespace() {
                 Ok(Token::Delim('|')) => {
-                    let prefix = Impl::NamespacePrefix::from_cow_str(value);
+                    let prefix = from_cow_str(value);
                     let result = context.namespace_prefixes.get(&prefix);
                     let url = try!(result.ok_or(()));
                     explicit_namespace(input, NamespaceConstraint::Specific(Namespace {
@@ -827,13 +830,13 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, i
         Some((_, None)) => unreachable!(),
         Some((namespace, Some(local_name))) => AttrSelector {
             namespace: namespace,
-            lower_name: Impl::LocalName::from_cow_str(local_name.to_ascii_lowercase().into()),
-            name: Impl::LocalName::from_cow_str(local_name),
+            lower_name: from_ascii_lowercase(&local_name),
+            name: from_cow_str(local_name),
         },
     };
 
     fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrValue, ()> {
-        Ok(Impl::AttrValue::from_cow_str(try!(input.expect_ident_or_string())))
+        Ok(from_cow_str(try!(input.expect_ident_or_string())))
     }
     // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
@@ -991,13 +994,13 @@ fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>,
     let start_position = input.position();
     match input.next_including_whitespace() {
         Ok(Token::IDHash(id)) => {
-            let id = SimpleSelector::ID(Impl::Identifier::from_cow_str(id));
+            let id = SimpleSelector::ID(from_cow_str(id));
             Ok(Some(SimpleSelectorParseResult::SimpleSelector(id)))
         }
         Ok(Token::Delim('.')) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(class)) => {
-                    let class = SimpleSelector::Class(Impl::ClassName::from_cow_str(class));
+                    let class = SimpleSelector::Class(from_cow_str(class));
                     Ok(Some(SimpleSelectorParseResult::SimpleSelector(class)))
                 }
                 _ => Err(()),
