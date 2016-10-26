@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use bloom::BloomHash;
 use cssparser::{Token, Parser, parse_nth, ToCss, serialize_identifier, CssStringWriter};
 use std::ascii::AsciiExt;
 use std::borrow::{Borrow, Cow};
@@ -37,11 +36,11 @@ macro_rules! with_bounds {
         /// of pseudo-classes/elements
         pub trait SelectorImpl: Sized + Debug {
             type AttrValue: $($CommonBounds)* + $($FromStr)* + Display;
-            type Identifier: $($CommonBounds)* + $($FromStr)* + Display + BloomHash;
-            type ClassName: $($CommonBounds)* + $($FromStr)* + Display + BloomHash;
-            type LocalName: $($CommonBounds)* + $($FromStr)* + Display + BloomHash
+            type Identifier: $($CommonBounds)* + $($FromStr)* + Display;
+            type ClassName: $($CommonBounds)* + $($FromStr)* + Display;
+            type LocalName: $($CommonBounds)* + $($FromStr)* + Display
                             + Borrow<Self::BorrowedLocalName>;
-            type NamespaceUrl: $($CommonBounds)* + Display + Default + BloomHash
+            type NamespaceUrl: $($CommonBounds)* + Display + Default
                                + Borrow<Self::BorrowedNamespaceUrl>;
             type NamespacePrefix: $($CommonBounds)* + $($FromStr)* + Display + Default;
             type BorrowedNamespaceUrl: ?Sized + Eq;
