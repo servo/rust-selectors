@@ -14,14 +14,6 @@ use std::sync::Arc;
 
 use HashMap;
 
-/// An empty trait that requires `HeapSizeOf` if the `heap_size` Cargo feature is enabled.
-#[cfg(feature = "heap_size")] pub trait MaybeHeapSizeOf: ::heapsize::HeapSizeOf {}
-#[cfg(feature = "heap_size")] impl<T: ::heapsize::HeapSizeOf> MaybeHeapSizeOf for T {}
-
-/// An empty trait that requires `HeapSizeOf` if the `heap_size` Cargo feature is enabled.
-#[cfg(not(feature = "heap_size"))] pub trait MaybeHeapSizeOf {}
-#[cfg(not(feature = "heap_size"))] impl<T> MaybeHeapSizeOf for T {}
-
 /// Although it could, String does not implement From<Cow<str>>
 pub trait FromCowStr {
     fn from_cow_str(s: Cow<str>) -> Self;
@@ -39,56 +31,66 @@ impl FromCowStr for ::string_cache::Atom {
     }
 }
 
-/// This trait allows to define the parser implementation in regards
-/// of pseudo-classes/elements
-pub trait SelectorImpl: Sized + Debug {
-    type AttrValue: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash;
-    type Identifier: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
-    type ClassName: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
-    type LocalName: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash
-                    + Borrow<Self::BorrowedLocalName>;
-    type NamespaceUrl: Clone + Display + MaybeHeapSizeOf + Eq + Default + Hash + BloomHash
-                       + Borrow<Self::BorrowedNamespaceUrl>;
-    type NamespacePrefix: Clone + Display + MaybeHeapSizeOf + Eq + Default + Hash + FromCowStr;
-    type BorrowedNamespaceUrl: ?Sized + Eq;
-    type BorrowedLocalName: ?Sized + Eq + Hash;
+macro_rules! with_bounds {
+    ($( $HeapSizeOf: tt )*) => {
+        /// This trait allows to define the parser implementation in regards
+        /// of pseudo-classes/elements
+        pub trait SelectorImpl: Sized + Debug {
+            type AttrValue: Clone + Display + Eq + FromCowStr + Hash $($HeapSizeOf)*;
+            type Identifier: Clone + Display + Eq + FromCowStr + Hash + BloomHash $($HeapSizeOf)*;
+            type ClassName: Clone + Display + Eq + FromCowStr + Hash + BloomHash $($HeapSizeOf)*;
+            type LocalName: Clone + Display + Eq + FromCowStr + Hash + BloomHash $($HeapSizeOf)*
+                            + Borrow<Self::BorrowedLocalName>;
+            type NamespaceUrl: Clone + Display + Eq + Default + Hash + BloomHash $($HeapSizeOf)*
+                               + Borrow<Self::BorrowedNamespaceUrl>;
+            type NamespacePrefix: Clone + Display + Eq + Default + Hash + FromCowStr $($HeapSizeOf)*;
+            type BorrowedNamespaceUrl: ?Sized + Eq;
+            type BorrowedLocalName: ?Sized + Eq + Hash;
 
-    /// Declares if the following "attribute exists" selector is considered
-    /// "common" enough to be shareable. If that's not the case, when matching
-    /// over an element, the relation
-    /// AFFECTED_BY_NON_COMMON_STYLE_AFFECTING_ATTRIBUTE would be set.
-    fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector<Self>) -> bool {
-        false
+            /// non tree-structural pseudo-classes
+            /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
+            type NonTSPseudoClass: Clone + Eq + Hash + PartialEq + Sized + ToCss $($HeapSizeOf)*;
+
+            /// pseudo-elements
+            type PseudoElement: Sized + PartialEq + Eq + Clone + Hash + ToCss $($HeapSizeOf)*;
+
+            /// Declares if the following "attribute exists" selector is considered
+            /// "common" enough to be shareable. If that's not the case, when matching
+            /// over an element, the relation
+            /// AFFECTED_BY_NON_COMMON_STYLE_AFFECTING_ATTRIBUTE would be set.
+            fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector<Self>) -> bool {
+                false
+            }
+
+            /// Declares if the following "equals" attribute selector is considered
+            /// "common" enough to be shareable.
+            fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector<Self>,
+                                                 _value: &Self::AttrValue) -> bool {
+                false
+            }
+
+            /// This function can return an "Err" pseudo-element in order to support CSS2.1
+            /// pseudo-elements.
+            fn parse_non_ts_pseudo_class(_context: &ParserContext<Self>,
+                                         _name: &str)
+                -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+
+            fn parse_non_ts_functional_pseudo_class(_context: &ParserContext<Self>,
+                                                    _name: &str,
+                                                    _arguments: &mut Parser)
+                -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+            fn parse_pseudo_element(_context: &ParserContext<Self>,
+                                    _name: &str)
+                -> Result<Self::PseudoElement, ()> { Err(()) }
+        }
     }
-
-    /// Declares if the following "equals" attribute selector is considered
-    /// "common" enough to be shareable.
-    fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector<Self>,
-                                         _value: &Self::AttrValue) -> bool {
-        false
-    }
-
-    /// non tree-structural pseudo-classes
-    /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
-    type NonTSPseudoClass: Clone + Eq + Hash + MaybeHeapSizeOf + PartialEq + Sized + ToCss;
-
-    /// This function can return an "Err" pseudo-element in order to support CSS2.1
-    /// pseudo-elements.
-    fn parse_non_ts_pseudo_class(_context: &ParserContext<Self>,
-                                 _name: &str)
-        -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
-
-    fn parse_non_ts_functional_pseudo_class(_context: &ParserContext<Self>,
-                                            _name: &str,
-                                            _arguments: &mut Parser)
-        -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
-
-    /// pseudo-elements
-    type PseudoElement: Sized + PartialEq + Eq + Clone + Hash + MaybeHeapSizeOf + ToCss;
-    fn parse_pseudo_element(_context: &ParserContext<Self>,
-                            _name: &str)
-        -> Result<Self::PseudoElement, ()> { Err(()) }
 }
+
+#[cfg(feature = "heap_size")]
+with_bounds!(+ ::heapsize::HeapSizeOf);
+
+#[cfg(not(feature = "heap_size"))]
+with_bounds!();
 
 pub struct ParserContext<Impl: SelectorImpl> {
     pub in_user_agent_stylesheet: bool,
