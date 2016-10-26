@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#![cfg_attr(all(test, feature = "unstable"), feature(test))]
 #![cfg_attr(feature = "heap_size", feature(plugin, custom_derive))]
 #![cfg_attr(feature = "heap_size", plugin(heapsize_plugin))]
 
@@ -10,7 +9,6 @@
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate cssparser;
 #[macro_use] extern crate matches;
-#[macro_use] extern crate string_cache;
 extern crate fnv;
 
 pub mod bloom;
