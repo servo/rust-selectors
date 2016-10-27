@@ -5,8 +5,7 @@
 //! Simple counting bloom filters.
 
 use fnv::FnvHasher;
-use std::hash::Hasher;
-use string_cache::{Atom, Namespace};
+use std::hash::{Hash, Hasher};
 
 const KEY_SIZE: usize = 12;
 const ARRAY_SIZE: usize = 1 << KEY_SIZE;
@@ -124,8 +123,8 @@ impl BloomFilter {
 
     /// Inserts an item into the bloom filter.
     #[inline]
-    pub fn insert<T:BloomHash>(&mut self, elem: &T) {
-        self.insert_hash(elem.bloom_hash())
+    pub fn insert<T: Hash>(&mut self, elem: &T) {
+        self.insert_hash(hash(elem))
 
     }
 
@@ -147,8 +146,8 @@ impl BloomFilter {
 
     /// Removes an item from the bloom filter.
     #[inline]
-    pub fn remove<T:BloomHash>(&mut self, elem: &T) {
-        self.remove_hash(elem.bloom_hash())
+    pub fn remove<T: Hash>(&mut self, elem: &T) {
+        self.remove_hash(hash(elem))
     }
 
     #[inline]
@@ -161,65 +160,22 @@ impl BloomFilter {
     /// but will never return false for items that are actually in the
     /// filter.
     #[inline]
-    pub fn might_contain<T:BloomHash>(&self, elem: &T) -> bool {
-        self.might_contain_hash(elem.bloom_hash())
-    }
-}
-
-pub trait BloomHash {
-    fn bloom_hash(&self) -> u32;
-}
-
-impl BloomHash for u64 {
-    #[inline]
-    fn bloom_hash(&self) -> u32 {
-        ((*self >> 32) ^ *self) as u32
-    }
-}
-
-impl BloomHash for isize {
-    #[allow(exceeding_bitshifts)]
-    #[inline]
-    fn bloom_hash(&self) -> u32 {
-        ((*self >> 32) ^ *self) as u32
-    }
-}
-
-impl BloomHash for usize {
-    #[allow(exceeding_bitshifts)]
-    #[inline]
-    fn bloom_hash(&self) -> u32 {
-        ((*self >> 32) ^ *self) as u32
-    }
-}
-
-impl BloomHash for Atom {
-    #[inline]
-    fn bloom_hash(&self) -> u32 {
-        self.get_hash()
-    }
-}
-
-impl BloomHash for Namespace {
-    #[inline]
-    fn bloom_hash(&self) -> u32 {
-        let Namespace(ref atom) = *self;
-        atom.bloom_hash()
-    }
-}
-
-impl BloomHash for String {
-    #[inline]
-    fn bloom_hash(&self) -> u32 {
-        let mut h = FnvHasher::default();
-        h.write(self.as_bytes());
-        h.finish().bloom_hash()
+    pub fn might_contain<T: Hash>(&self, elem: &T) -> bool {
+        self.might_contain_hash(hash(elem))
     }
 }
 
 #[inline]
 fn full(slot: &u8) -> bool {
     *slot == 0xff
+}
+
+#[inline]
+fn hash<T: Hash>(elem: &T) -> u32 {
+    let mut hasher = FnvHasher::default();
+    elem.hash(&mut hasher);
+    let hash: u64 = hasher.finish();
+    (hash >> 32) as u32 ^ (hash as u32)
 }
 
 #[inline]
@@ -247,7 +203,7 @@ fn create_and_insert_some_stuff() {
     let false_positives =
         (1001_usize .. 2000).filter(|i| bf.might_contain(i)).count();
 
-    assert!(false_positives < 10); // 1%.
+    assert!(false_positives < 150, "{} is not < 150", false_positives); // 15%.
 
     for i in 0_usize .. 100 {
         bf.remove(&i);
@@ -259,7 +215,7 @@ fn create_and_insert_some_stuff() {
 
     let false_positives = (0_usize .. 100).filter(|i| bf.might_contain(i)).count();
 
-    assert!(false_positives < 2); // 2%.
+    assert!(false_positives < 20, "{} is not < 20", false_positives); // 20%.
 
     bf.clear();
 

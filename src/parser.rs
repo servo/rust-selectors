@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use bloom::BloomHash;
 use cssparser::{Token, Parser, parse_nth, ToCss, serialize_identifier, CssStringWriter};
 use std::ascii::AsciiExt;
 use std::borrow::{Borrow, Cow};
@@ -14,81 +13,92 @@ use std::sync::Arc;
 
 use HashMap;
 
-/// An empty trait that requires `HeapSizeOf` if the `heap_size` Cargo feature is enabled.
-#[cfg(feature = "heap_size")] pub trait MaybeHeapSizeOf: ::heapsize::HeapSizeOf {}
-#[cfg(feature = "heap_size")] impl<T: ::heapsize::HeapSizeOf> MaybeHeapSizeOf for T {}
+macro_rules! with_bounds {
+    ( [ $( $CommonBounds: tt )* ] [ $( $FromStr: tt )* ]) => {
+        fn from_cow_str<T>(cow: Cow<str>) -> T where T: $($FromStr)* {
+            match cow {
+                Cow::Borrowed(s) => T::from(s),
+                Cow::Owned(s) => T::from(s),
+            }
+        }
 
-/// An empty trait that requires `HeapSizeOf` if the `heap_size` Cargo feature is enabled.
-#[cfg(not(feature = "heap_size"))] pub trait MaybeHeapSizeOf {}
-#[cfg(not(feature = "heap_size"))] impl<T> MaybeHeapSizeOf for T {}
+        fn from_ascii_lowercase<T>(s: &str) -> T where T: $($FromStr)* {
+            if let Some(first_uppercase) = s.bytes().position(|byte| byte >= b'A' && byte <= b'Z') {
+                let mut string = s.to_owned();
+                string[first_uppercase..].make_ascii_lowercase();
+                T::from(string)
+            } else {
+                T::from(s)
+            }
+        }
 
-/// Although it could, String does not implement From<Cow<str>>
-pub trait FromCowStr {
-    fn from_cow_str(s: Cow<str>) -> Self;
-}
+        /// This trait allows to define the parser implementation in regards
+        /// of pseudo-classes/elements
+        pub trait SelectorImpl: Sized + Debug {
+            type AttrValue: $($CommonBounds)* + $($FromStr)* + Display;
+            type Identifier: $($CommonBounds)* + $($FromStr)* + Display;
+            type ClassName: $($CommonBounds)* + $($FromStr)* + Display;
+            type LocalName: $($CommonBounds)* + $($FromStr)* + Display
+                            + Borrow<Self::BorrowedLocalName>;
+            type NamespaceUrl: $($CommonBounds)* + Display + Default
+                               + Borrow<Self::BorrowedNamespaceUrl>;
+            type NamespacePrefix: $($CommonBounds)* + $($FromStr)* + Display + Default;
+            type BorrowedNamespaceUrl: ?Sized + Eq;
+            type BorrowedLocalName: ?Sized + Eq + Hash;
 
-impl FromCowStr for String {
-    fn from_cow_str(s: Cow<str>) -> Self {
-        s.into_owned()
+            /// non tree-structural pseudo-classes
+            /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
+            type NonTSPseudoClass: $($CommonBounds)* + Sized + ToCss;
+
+            /// pseudo-elements
+            type PseudoElement: $($CommonBounds)* + Sized + ToCss;
+
+            /// Declares if the following "attribute exists" selector is considered
+            /// "common" enough to be shareable. If that's not the case, when matching
+            /// over an element, the relation
+            /// AFFECTED_BY_NON_COMMON_STYLE_AFFECTING_ATTRIBUTE would be set.
+            fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector<Self>) -> bool {
+                false
+            }
+
+            /// Declares if the following "equals" attribute selector is considered
+            /// "common" enough to be shareable.
+            fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector<Self>,
+                                                 _value: &Self::AttrValue) -> bool {
+                false
+            }
+
+            /// This function can return an "Err" pseudo-element in order to support CSS2.1
+            /// pseudo-elements.
+            fn parse_non_ts_pseudo_class(_context: &ParserContext<Self>,
+                                         _name: &str)
+                -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+
+            fn parse_non_ts_functional_pseudo_class(_context: &ParserContext<Self>,
+                                                    _name: &str,
+                                                    _arguments: &mut Parser)
+                -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+            fn parse_pseudo_element(_context: &ParserContext<Self>,
+                                    _name: &str)
+                -> Result<Self::PseudoElement, ()> { Err(()) }
+        }
     }
 }
 
-impl FromCowStr for ::string_cache::Atom {
-    fn from_cow_str(s: Cow<str>) -> Self {
-        s.into()
+macro_rules! with_heap_size_bound {
+    ($( $HeapSizeOf: tt )*) => {
+        with_bounds! {
+            [Clone + Eq + Hash $($HeapSizeOf)*]
+            [From<String> + for<'a> From<&'a str>]
+        }
     }
 }
 
-/// This trait allows to define the parser implementation in regards
-/// of pseudo-classes/elements
-pub trait SelectorImpl: Sized + Debug {
-    type AttrValue: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash;
-    type Identifier: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
-    type ClassName: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash;
-    type LocalName: Clone + Display + MaybeHeapSizeOf + Eq + FromCowStr + Hash + BloomHash
-                    + Borrow<Self::BorrowedLocalName>;
-    type NamespaceUrl: Clone + Display + MaybeHeapSizeOf + Eq + Default + Hash + BloomHash
-                       + Borrow<Self::BorrowedNamespaceUrl>;
-    type NamespacePrefix: Clone + Display + MaybeHeapSizeOf + Eq + Default + Hash + FromCowStr;
-    type BorrowedNamespaceUrl: ?Sized + Eq;
-    type BorrowedLocalName: ?Sized + Eq + Hash;
+#[cfg(feature = "heap_size")]
+with_heap_size_bound!(+ ::heapsize::HeapSizeOf);
 
-    /// Declares if the following "attribute exists" selector is considered
-    /// "common" enough to be shareable. If that's not the case, when matching
-    /// over an element, the relation
-    /// AFFECTED_BY_NON_COMMON_STYLE_AFFECTING_ATTRIBUTE would be set.
-    fn attr_exists_selector_is_shareable(_attr_selector: &AttrSelector<Self>) -> bool {
-        false
-    }
-
-    /// Declares if the following "equals" attribute selector is considered
-    /// "common" enough to be shareable.
-    fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector<Self>,
-                                         _value: &Self::AttrValue) -> bool {
-        false
-    }
-
-    /// non tree-structural pseudo-classes
-    /// (see: https://drafts.csswg.org/selectors/#structural-pseudos)
-    type NonTSPseudoClass: Clone + Eq + Hash + MaybeHeapSizeOf + PartialEq + Sized + ToCss;
-
-    /// This function can return an "Err" pseudo-element in order to support CSS2.1
-    /// pseudo-elements.
-    fn parse_non_ts_pseudo_class(_context: &ParserContext<Self>,
-                                 _name: &str)
-        -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
-
-    fn parse_non_ts_functional_pseudo_class(_context: &ParserContext<Self>,
-                                            _name: &str,
-                                            _arguments: &mut Parser)
-        -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
-
-    /// pseudo-elements
-    type PseudoElement: Sized + PartialEq + Eq + Clone + Hash + MaybeHeapSizeOf + ToCss;
-    fn parse_pseudo_element(_context: &ParserContext<Self>,
-                            _name: &str)
-        -> Result<Self::PseudoElement, ()> { Err(()) }
-}
+#[cfg(not(feature = "heap_size"))]
+with_heap_size_bound!();
 
 pub struct ParserContext<Impl: SelectorImpl> {
     pub in_user_agent_stylesheet: bool,
@@ -714,8 +724,8 @@ fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input:
             match local_name {
                 Some(name) => {
                     compound_selector.push(SimpleSelector::LocalName(LocalName {
-                        lower_name: Impl::LocalName::from_cow_str(name.to_ascii_lowercase().into()),
-                        name: Impl::LocalName::from_cow_str(name),
+                        lower_name: from_ascii_lowercase(&name),
+                        name: from_cow_str(name),
                     }))
                 }
                 None => (),
@@ -769,7 +779,7 @@ fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
             let position = input.position();
             match input.next_including_whitespace() {
                 Ok(Token::Delim('|')) => {
-                    let prefix = Impl::NamespacePrefix::from_cow_str(value);
+                    let prefix = from_cow_str(value);
                     let result = context.namespace_prefixes.get(&prefix);
                     let url = try!(result.ok_or(()));
                     explicit_namespace(input, NamespaceConstraint::Specific(Namespace {
@@ -819,13 +829,13 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, i
         Some((_, None)) => unreachable!(),
         Some((namespace, Some(local_name))) => AttrSelector {
             namespace: namespace,
-            lower_name: Impl::LocalName::from_cow_str(local_name.to_ascii_lowercase().into()),
-            name: Impl::LocalName::from_cow_str(local_name),
+            lower_name: from_ascii_lowercase(&local_name),
+            name: from_cow_str(local_name),
         },
     };
 
     fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrValue, ()> {
-        Ok(Impl::AttrValue::from_cow_str(try!(input.expect_ident_or_string())))
+        Ok(from_cow_str(try!(input.expect_ident_or_string())))
     }
     // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
@@ -983,13 +993,13 @@ fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>,
     let start_position = input.position();
     match input.next_including_whitespace() {
         Ok(Token::IDHash(id)) => {
-            let id = SimpleSelector::ID(Impl::Identifier::from_cow_str(id));
+            let id = SimpleSelector::ID(from_cow_str(id));
             Ok(Some(SimpleSelectorParseResult::SimpleSelector(id)))
         }
         Ok(Token::Delim('.')) => {
             match input.next_including_whitespace() {
                 Ok(Token::Ident(class)) => {
-                    let class = SimpleSelector::Class(Impl::ClassName::from_cow_str(class));
+                    let class = SimpleSelector::Class(from_cow_str(class));
                     Ok(Some(SimpleSelectorParseResult::SimpleSelector(class)))
                 }
                 _ => Err(()),
