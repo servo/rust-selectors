@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use cssparser::{Token, Parser, parse_nth, ToCss, serialize_identifier, CssStringWriter};
+use cssparser::{Token, Parser as CssParser, parse_nth, ToCss, serialize_identifier, CssStringWriter};
 use std::ascii::AsciiExt;
 use std::borrow::{Borrow, Cow};
 use std::cmp;
@@ -76,7 +76,7 @@ macro_rules! with_bounds {
 
             fn parse_non_ts_functional_pseudo_class(_context: &ParserContext<Self>,
                                                     _name: &str,
-                                                    _arguments: &mut Parser)
+                                                    _arguments: &mut CssParser)
                 -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
             fn parse_pseudo_element(_context: &ParserContext<Self>,
                                     _name: &str)
@@ -610,14 +610,14 @@ fn complex_selector_specificity<Impl>(mut selector: &ComplexSelector<Impl>)
 
 pub fn parse_author_origin_selector_list_from_str<Impl: SelectorImpl>(input: &str) -> Result<Vec<Selector<Impl>>, ()> {
     let context = ParserContext::new();
-    parse_selector_list(&context, &mut Parser::new(input))
+    parse_selector_list(&context, &mut CssParser::new(input))
 }
 
 /// Parse a comma-separated list of Selectors.
 /// aka Selector Group in http://www.w3.org/TR/css3-selectors/#grouping
 ///
 /// Return the Selectors or None if there is an invalid selector.
-pub fn parse_selector_list<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut Parser)
+pub fn parse_selector_list<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut CssParser)
                            -> Result<Vec<Selector<Impl>>,()> {
     input.parse_comma_separated(|input| parse_selector(context, input))
 }
@@ -628,7 +628,7 @@ pub fn parse_selector_list<Impl: SelectorImpl>(context: &ParserContext<Impl>, in
 ///
 /// `Err` means invalid selector.
 fn parse_selector<Impl>(context: &ParserContext<Impl>,
-                        input: &mut Parser)
+                        input: &mut CssParser)
                         -> Result<Selector<Impl>, ()>
     where Impl: SelectorImpl
 {
@@ -643,7 +643,7 @@ fn parse_selector<Impl>(context: &ParserContext<Impl>,
 
 fn parse_complex_selector_and_pseudo_element<Impl>(
         context: &ParserContext<Impl>,
-        input: &mut Parser)
+        input: &mut CssParser)
         -> Result<(ComplexSelector<Impl>, Option<Impl::PseudoElement>), ()>
     where Impl: SelectorImpl
 {
@@ -694,7 +694,7 @@ fn parse_complex_selector_and_pseudo_element<Impl>(
 
 fn parse_complex_selector<Impl>(
         context: &ParserContext<Impl>,
-        input: &mut Parser)
+        input: &mut CssParser)
         -> Result<ComplexSelector<Impl>, ()>
     where Impl: SelectorImpl
 {
@@ -709,7 +709,7 @@ fn parse_complex_selector<Impl>(
 /// * `Err(())`: Invalid selector, abort
 /// * `Ok(None)`: Not a type selector, could be something else. `input` was not consumed.
 /// * `Ok(Some(vec))`: Length 0 (`*|*`), 1 (`*|E` or `ns|*`) or 2 (`|E` or `ns|E`)
-fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut Parser)
+fn parse_type_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut CssParser)
                        -> Result<Option<Vec<SimpleSelector<Impl>>>, ()> {
     match try!(parse_qualified_name(context, input, /* in_attr_selector = */ false)) {
         None => Ok(None),
@@ -747,7 +747,7 @@ enum SimpleSelectorParseResult<Impl: SelectorImpl> {
 /// * `Ok(None)`: Not a simple selector, could be something else. `input` was not consumed.
 /// * `Ok(Some((namespace, local_name)))`: `None` for the local name means a `*` universal selector
 fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
-                       (context: &ParserContext<Impl>, input: &mut Parser<'i, 't>,
+                       (context: &ParserContext<Impl>, input: &mut CssParser<'i, 't>,
                         in_attr_selector: bool)
                         -> Result<Option<(NamespaceConstraint<Impl>, Option<Cow<'i, str>>)>, ()> {
     let default_namespace = |local_name| {
@@ -761,7 +761,7 @@ fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
         Ok(Some((namespace, local_name)))
     };
 
-    let explicit_namespace = |input: &mut Parser<'i, 't>, namespace| {
+    let explicit_namespace = |input: &mut CssParser<'i, 't>, namespace| {
         match input.next_including_whitespace() {
             Ok(Token::Delim('*')) if !in_attr_selector => {
                 Ok(Some((namespace, None)))
@@ -822,7 +822,7 @@ fn parse_qualified_name<'i, 't, Impl: SelectorImpl>
 }
 
 
-fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut Parser)
+fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, input: &mut CssParser)
                             -> Result<SimpleSelector<Impl>, ()> {
     let attr = match try!(parse_qualified_name(context, input, /* in_attr_selector = */ true)) {
         None => return Err(()),
@@ -834,7 +834,7 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, i
         },
     };
 
-    fn parse_value<Impl: SelectorImpl>(input: &mut Parser) -> Result<Impl::AttrValue, ()> {
+    fn parse_value<Impl: SelectorImpl>(input: &mut CssParser) -> Result<Impl::AttrValue, ()> {
         Ok(from_cow_str(try!(input.expect_ident_or_string())))
     }
     // TODO: deal with empty value or value containing whitespace (see spec)
@@ -873,7 +873,7 @@ fn parse_attribute_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>, i
 }
 
 
-fn parse_attribute_flags(input: &mut Parser) -> Result<CaseSensitivity, ()> {
+fn parse_attribute_flags(input: &mut CssParser) -> Result<CaseSensitivity, ()> {
     match input.next() {
         Err(()) => Ok(CaseSensitivity::CaseSensitive),
         Ok(Token::Ident(ref value)) if value.eq_ignore_ascii_case("i") => {
@@ -887,7 +887,7 @@ fn parse_attribute_flags(input: &mut Parser) -> Result<CaseSensitivity, ()> {
 /// Level 3: Parse **one** simple_selector.  (Though we might insert a second
 /// implied "<defaultns>|*" type selector.)
 fn parse_negation<Impl: SelectorImpl>(context: &ParserContext<Impl>,
-                                      input: &mut Parser)
+                                      input: &mut CssParser)
                                       -> Result<SimpleSelector<Impl>, ()> {
     input.parse_comma_separated(|input| parse_complex_selector(context, input).map(Arc::new))
          .map(SimpleSelector::Negation)
@@ -899,7 +899,7 @@ fn parse_negation<Impl: SelectorImpl>(context: &ParserContext<Impl>,
 ///
 /// `Err(())` means invalid selector
 fn parse_compound_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>,
-                                               input: &mut Parser)
+                                               input: &mut CssParser)
                                                -> Result<(Vec<SimpleSelector<Impl>>, Option<Impl::PseudoElement>), ()> {
     // Consume any leading whitespace.
     loop {
@@ -952,7 +952,7 @@ fn parse_compound_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>,
 }
 
 fn parse_functional_pseudo_class<Impl: SelectorImpl>(context: &ParserContext<Impl>,
-                                                     input: &mut Parser,
+                                                     input: &mut CssParser,
                                                      name: &str,
                                                      inside_negation: bool)
                                                      -> Result<SimpleSelector<Impl>, ()> {
@@ -974,7 +974,8 @@ fn parse_functional_pseudo_class<Impl: SelectorImpl>(context: &ParserContext<Imp
 }
 
 
-fn parse_nth_pseudo_class<Impl: SelectorImpl, F>(input: &mut Parser, selector: F) -> Result<SimpleSelector<Impl>, ()>
+fn parse_nth_pseudo_class<Impl: SelectorImpl, F>(input: &mut CssParser, selector: F)
+                                                 -> Result<SimpleSelector<Impl>, ()>
 where F: FnOnce(i32, i32) -> SimpleSelector<Impl> {
     let (a, b) = try!(parse_nth(input));
     Ok(selector(a, b))
@@ -987,7 +988,7 @@ where F: FnOnce(i32, i32) -> SimpleSelector<Impl> {
 /// * `Ok(None)`: Not a simple selector, could be something else. `input` was not consumed.
 /// * `Ok(Some(_))`: Parsed a simple selector or pseudo-element
 fn parse_one_simple_selector<Impl: SelectorImpl>(context: &ParserContext<Impl>,
-                             input: &mut Parser,
+                             input: &mut CssParser,
                              inside_negation: bool)
                              -> Result<Option<SimpleSelectorParseResult<Impl>>,()> {
     let start_position = input.position();
@@ -1072,7 +1073,7 @@ fn parse_simple_pseudo_class<Impl: SelectorImpl>(context: &ParserContext<Impl>, 
 pub mod tests {
     use std::fmt;
     use std::sync::Arc;
-    use cssparser::{Parser, ToCss, serialize_identifier};
+    use cssparser::{Parser as CssParser, ToCss, serialize_identifier};
     use super::*;
 
     #[derive(PartialEq, Clone, Debug, Hash, Eq)]
@@ -1139,7 +1140,8 @@ pub mod tests {
         }
 
         fn parse_non_ts_functional_pseudo_class(_context: &ParserContext<Self>, name: &str,
-                                                parser: &mut Parser) -> Result<PseudoClass, ()> {
+                                                parser: &mut CssParser)
+                                                -> Result<PseudoClass, ()> {
             match_ignore_ascii_case! { name,
                 "lang" => Ok(PseudoClass::Lang(try!(parser.expect_ident_or_string()).into_owned())),
                 _ => Err(())
@@ -1163,7 +1165,7 @@ pub mod tests {
 
     fn parse_ns(input: &str, context: &ParserContext<DummySelectorImpl>)
                 -> Result<Vec<Selector<DummySelectorImpl>>, ()> {
-        let result = parse_selector_list(context, &mut Parser::new(input));
+        let result = parse_selector_list(context, &mut CssParser::new(input));
         if let Ok(ref selectors) = result {
             assert_eq!(selectors.len(), 1);
             assert_eq!(selectors[0].to_css_string(), input);
