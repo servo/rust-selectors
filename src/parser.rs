@@ -34,13 +34,13 @@ macro_rules! with_bounds {
 
         /// This trait allows to define the parser implementation in regards
         /// of pseudo-classes/elements
-        pub trait SelectorImpl: Sized + Debug {
+        pub trait SelectorImpl: Sized {
             type AttrValue: $($CommonBounds)* + $($FromStr)* + Display;
             type Identifier: $($CommonBounds)* + $($FromStr)* + Display;
             type ClassName: $($CommonBounds)* + $($FromStr)* + Display;
             type LocalName: $($CommonBounds)* + $($FromStr)* + Display
                             + Borrow<Self::BorrowedLocalName>;
-            type NamespaceUrl: $($CommonBounds)* + Display + Default
+            type NamespaceUrl: $($CommonBounds)* + Default
                                + Borrow<Self::BorrowedNamespaceUrl>;
             type NamespacePrefix: $($CommonBounds)* + $($FromStr)* + Display + Default;
             type BorrowedNamespaceUrl: ?Sized + Eq;
