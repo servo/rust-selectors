@@ -64,7 +64,8 @@ macro_rules! with_bounds {
             /// Declares if the following "equals" attribute selector is considered
             /// "common" enough to be shareable.
             fn attr_equals_selector_is_shareable(_attr_selector: &AttrSelector<Self>,
-                                                 _value: &Self::AttrValue) -> bool {
+                                                 _value: &Self::AttrValue)
+                                                 -> bool {
                 false
             }
 
@@ -72,15 +73,22 @@ macro_rules! with_bounds {
             /// pseudo-elements.
             fn parse_non_ts_pseudo_class(_context: &ParserContext<Self>,
                                          _name: &str)
-                -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+                                         -> Result<Self::NonTSPseudoClass, ()> {
+                Err(())
+            }
 
             fn parse_non_ts_functional_pseudo_class(_context: &ParserContext<Self>,
                                                     _name: &str,
                                                     _arguments: &mut CssParser)
-                -> Result<Self::NonTSPseudoClass, ()> { Err(()) }
+                                                    -> Result<Self::NonTSPseudoClass, ()> {
+                Err(())
+            }
+
             fn parse_pseudo_element(_context: &ParserContext<Self>,
                                     _name: &str)
-                -> Result<Self::PseudoElement, ()> { Err(()) }
+                                    -> Result<Self::PseudoElement, ()> {
+                Err(())
+            }
         }
     }
 }
