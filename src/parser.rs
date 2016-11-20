@@ -13,8 +13,12 @@ use std::sync::Arc;
 
 use HashMap;
 
-macro_rules! with_bounds {
-    ( [ $( $CommonBounds: tt )* ] [ $( $FromStr: tt )* ]) => {
+macro_rules! with_all_bounds {
+    (
+        [ $( $InSelector: tt )* ]
+        [ $( $CommonBounds: tt )* ]
+        [ $( $FromStr: tt )* ]
+    ) => {
         fn from_cow_str<T>(cow: Cow<str>) -> T where T: $($FromStr)* {
             match cow {
                 Cow::Borrowed(s) => T::from(s),
@@ -35,14 +39,12 @@ macro_rules! with_bounds {
         /// This trait allows to define the parser implementation in regards
         /// of pseudo-classes/elements
         pub trait SelectorImpl: Sized {
-            type AttrValue: $($CommonBounds)* + $($FromStr)* + Display;
-            type Identifier: $($CommonBounds)* + $($FromStr)* + Display;
-            type ClassName: $($CommonBounds)* + $($FromStr)* + Display;
-            type LocalName: $($CommonBounds)* + $($FromStr)* + Display
-                            + Borrow<Self::BorrowedLocalName>;
-            type NamespaceUrl: $($CommonBounds)* + Default
-                               + Borrow<Self::BorrowedNamespaceUrl>;
-            type NamespacePrefix: $($CommonBounds)* + $($FromStr)* + Display + Default;
+            type AttrValue: $($InSelector)*;
+            type Identifier: $($InSelector)*;
+            type ClassName: $($InSelector)*;
+            type LocalName: $($InSelector)* + Borrow<Self::BorrowedLocalName>;
+            type NamespaceUrl: $($CommonBounds)* + Default + Borrow<Self::BorrowedNamespaceUrl>;
+            type NamespacePrefix: $($InSelector)* + Default;
             type BorrowedNamespaceUrl: ?Sized + Eq;
             type BorrowedLocalName: ?Sized + Eq + Hash;
 
@@ -89,6 +91,16 @@ macro_rules! with_bounds {
                                     -> Result<Self::PseudoElement, ()> {
                 Err(())
             }
+        }
+    }
+}
+
+macro_rules! with_bounds {
+    ( [ $( $CommonBounds: tt )* ] [ $( $FromStr: tt )* ]) => {
+        with_all_bounds! {
+            [$($CommonBounds)* + $($FromStr)* + Display]
+            [$($CommonBounds)*]
+            [$($FromStr)*]
         }
     }
 }
