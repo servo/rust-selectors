@@ -102,19 +102,19 @@ pub trait Parser {
 
     /// This function can return an "Err" pseudo-element in order to support CSS2.1
     /// pseudo-elements.
-    fn parse_non_ts_pseudo_class(&self, _name: &str)
+    fn parse_non_ts_pseudo_class(&self, _name: Cow<str>)
                                  -> Result<<Self::Impl as SelectorImpl>::NonTSPseudoClass, ()> {
         Err(())
     }
 
     fn parse_non_ts_functional_pseudo_class
-        (&self, _name: &str, _arguments: &mut CssParser)
+        (&self, _name: Cow<str>, _arguments: &mut CssParser)
         -> Result<<Self::Impl as SelectorImpl>::NonTSPseudoClass, ()>
     {
         Err(())
     }
 
-    fn parse_pseudo_element(&self, _name: &str)
+    fn parse_pseudo_element(&self, _name: Cow<str>)
                             -> Result<<Self::Impl as SelectorImpl>::PseudoElement, ()> {
         Err(())
     }
@@ -986,26 +986,27 @@ fn parse_compound_selector<P, Impl>(
 
 fn parse_functional_pseudo_class<P, Impl>(parser: &P,
                                           input: &mut CssParser,
-                                          name: &str,
+                                          name: Cow<str>,
                                           inside_negation: bool)
                                           -> Result<SimpleSelector<Impl>, ()>
     where P: Parser<Impl=Impl>, Impl: SelectorImpl
 {
-    match_ignore_ascii_case! { name,
-        "nth-child" => parse_nth_pseudo_class(input, SimpleSelector::NthChild),
-        "nth-of-type" => parse_nth_pseudo_class(input, SimpleSelector::NthOfType),
-        "nth-last-child" => parse_nth_pseudo_class(input, SimpleSelector::NthLastChild),
-        "nth-last-of-type" => parse_nth_pseudo_class(input, SimpleSelector::NthLastOfType),
+    match_ignore_ascii_case! { &name,
+        "nth-child" => return parse_nth_pseudo_class(input, SimpleSelector::NthChild),
+        "nth-of-type" => return parse_nth_pseudo_class(input, SimpleSelector::NthOfType),
+        "nth-last-child" => return parse_nth_pseudo_class(input, SimpleSelector::NthLastChild),
+        "nth-last-of-type" => return parse_nth_pseudo_class(input, SimpleSelector::NthLastOfType),
         "not" => {
             if inside_negation {
-                Err(())
+                return Err(())
             } else {
-                parse_negation(parser, input)
+                return parse_negation(parser, input)
             }
         },
-        _ => P::parse_non_ts_functional_pseudo_class(parser, name, input)
-            .map(SimpleSelector::NonTSPseudoClass)
+        _ => {}
     }
+    P::parse_non_ts_functional_pseudo_class(parser, name, input)
+        .map(SimpleSelector::NonTSPseudoClass)
 }
 
 
@@ -1058,23 +1059,23 @@ fn parse_one_simple_selector<P, Impl>(parser: &P,
                        name.eq_ignore_ascii_case("after") ||
                        name.eq_ignore_ascii_case("first-line") ||
                        name.eq_ignore_ascii_case("first-letter") {
-                        let pseudo_element = try!(P::parse_pseudo_element(parser, &name));
+                        let pseudo_element = try!(P::parse_pseudo_element(parser, name));
                         Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
                     } else {
-                        let pseudo_class = try!(parse_simple_pseudo_class(parser, &name));
+                        let pseudo_class = try!(parse_simple_pseudo_class(parser, name));
                         Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo_class)))
                     }
                 }
                 Ok(Token::Function(name)) => {
                     let pseudo = try!(input.parse_nested_block(|input| {
-                        parse_functional_pseudo_class(parser, input, &name, inside_negation)
+                        parse_functional_pseudo_class(parser, input, name, inside_negation)
                     }));
                     Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo)))
                 }
                 Ok(Token::Colon) => {
                     match input.next() {
                         Ok(Token::Ident(name)) => {
-                            let pseudo = try!(P::parse_pseudo_element(parser, &name));
+                            let pseudo = try!(P::parse_pseudo_element(parser, name));
                             Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo)))
                         }
                         _ => Err(())
@@ -1090,10 +1091,10 @@ fn parse_one_simple_selector<P, Impl>(parser: &P,
     }
 }
 
-fn parse_simple_pseudo_class<P, Impl>(parser: &P, name: &str) -> Result<SimpleSelector<Impl>, ()>
+fn parse_simple_pseudo_class<P, Impl>(parser: &P, name: Cow<str>) -> Result<SimpleSelector<Impl>, ()>
     where P: Parser<Impl=Impl>, Impl: SelectorImpl
 {
-    match_ignore_ascii_case! { name,
+    (match_ignore_ascii_case! { &name,
         "first-child" => Ok(SimpleSelector::FirstChild),
         "last-child"  => Ok(SimpleSelector::LastChild),
         "only-child"  => Ok(SimpleSelector::OnlyChild),
@@ -1102,13 +1103,16 @@ fn parse_simple_pseudo_class<P, Impl>(parser: &P, name: &str) -> Result<SimpleSe
         "first-of-type" => Ok(SimpleSelector::FirstOfType),
         "last-of-type"  => Ok(SimpleSelector::LastOfType),
         "only-of-type"  => Ok(SimpleSelector::OnlyOfType),
-        _ => P::parse_non_ts_pseudo_class(parser, name).map(|pc| SimpleSelector::NonTSPseudoClass(pc))
-    }
+        _ => Err(())
+    }).or_else(|()| {
+        P::parse_non_ts_pseudo_class(parser, name).map(|pc| SimpleSelector::NonTSPseudoClass(pc))
+    })
 }
 
 // NB: pub module in order to access the DummyParser
 #[cfg(test)]
 pub mod tests {
+    use std::borrow::Cow;
     use std::collections::HashMap;
     use std::fmt;
     use std::sync::Arc;
@@ -1174,26 +1178,26 @@ pub mod tests {
     impl Parser for DummyParser {
         type Impl = DummySelectorImpl;
 
-        fn parse_non_ts_pseudo_class(&self, name: &str)
+        fn parse_non_ts_pseudo_class(&self, name: Cow<str>)
                                      -> Result<PseudoClass, ()> {
-            match_ignore_ascii_case! { name,
+            match_ignore_ascii_case! { &name,
                 "hover" => Ok(PseudoClass::Hover),
                 _ => Err(())
             }
         }
 
-        fn parse_non_ts_functional_pseudo_class(&self, name: &str,
+        fn parse_non_ts_functional_pseudo_class(&self, name: Cow<str>,
                                                 parser: &mut CssParser)
                                                 -> Result<PseudoClass, ()> {
-            match_ignore_ascii_case! { name,
+            match_ignore_ascii_case! { &name,
                 "lang" => Ok(PseudoClass::Lang(try!(parser.expect_ident_or_string()).into_owned())),
                 _ => Err(())
             }
         }
 
-        fn parse_pseudo_element(&self, name: &str)
+        fn parse_pseudo_element(&self, name: Cow<str>)
                                 -> Result<PseudoElement, ()> {
-            match_ignore_ascii_case! { name,
+            match_ignore_ascii_case! { &name,
                 "before" => Ok(PseudoElement::Before),
                 "after" => Ok(PseudoElement::After),
                 _ => Err(())
