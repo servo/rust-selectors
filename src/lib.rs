@@ -16,5 +16,6 @@ pub mod matching;
 pub mod parser;
 mod tree;
 
+pub use parser::{SelectorImpl, Parser, SelectorList};
 pub use tree::Element;
 pub use tree::{MatchAttr, MatchAttrGeneric};
