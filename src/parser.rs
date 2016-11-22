@@ -135,7 +135,7 @@ pub struct SelectorList<Impl: SelectorImpl>(pub Vec<Selector<Impl>>);
 
 impl<Impl: SelectorImpl> SelectorList<Impl> {
     /// Parse a comma-separated list of Selectors.
-    /// aka Selector Group in http://www.w3.org/TR/css3-selectors/#grouping
+    /// https://drafts.csswg.org/selectors/#grouping
     ///
     /// Return the Selectors or Err if there is an invalid selector.
     pub fn parse<P>(parser: &P, input: &mut CssParser) -> Result<Self, ()>
