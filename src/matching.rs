@@ -74,6 +74,14 @@ bitflags! {
 
         /// Whether this element has pseudo-element styles. Computed externally.
         const AFFECTED_BY_PSEUDO_ELEMENTS = 1 << 8,
+
+        /// Whether this element has effective animation styles. Computed
+        /// externally.
+        const AFFECTED_BY_ANIMATIONS = 1 << 9,
+
+        /// Whether this element has effective transition styles. Computed
+        /// externally.
+        const AFFECTED_BY_TRANSITIONS = 1 << 10,
     }
 }
 
