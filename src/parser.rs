@@ -1073,7 +1073,7 @@ fn parse_one_simple_selector<P, Impl>(parser: &P,
                     Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo)))
                 }
                 Ok(Token::Colon) => {
-                    match input.next() {
+                    match input.next_including_whitespace() {
                         Ok(Token::Ident(name)) => {
                             let pseudo = try!(P::parse_pseudo_element(parser, name));
                             Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo)))
@@ -1406,6 +1406,8 @@ pub mod tests {
             pseudo_element: Some(PseudoElement::Before),
             specificity: specificity(0, 0, 1),
         }))));
+        // https://github.com/servo/servo/issues/15335
+        assert_eq!(parse(":: before"), Err(()));
         assert_eq!(parse("div ::after"), Ok(SelectorList(vec!(Selector {
             complex_selector: Arc::new(ComplexSelector {
                 compound_selector: vec!(),
