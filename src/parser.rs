@@ -10,6 +10,7 @@ use std::fmt::{self, Display, Debug, Write};
 use std::hash::Hash;
 use std::ops::Add;
 use std::sync::Arc;
+use tree::SELECTOR_WHITESPACE;
 
 macro_rules! with_all_bounds {
     (
@@ -190,6 +191,9 @@ fn matches_non_common_style_affecting_attribute<Impl: SelectorImpl>(simple_selec
         SimpleSelector::AttrPrefixMatch(..) |
         SimpleSelector::AttrSuffixMatch(..) |
         SimpleSelector::AttrSubstringMatch(..) => true,
+
+        // This deliberately includes Attr*NeverMatch
+        // which never match regardless of element attributes.
         _ => false,
     }
 }
@@ -262,6 +266,11 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
     AttrPrefixMatch(AttrSelector<Impl>, Impl::AttrValue),  // [foo^=bar]
     AttrSubstringMatch(AttrSelector<Impl>, Impl::AttrValue),  // [foo*=bar]
     AttrSuffixMatch(AttrSelector<Impl>, Impl::AttrValue),  // [foo$=bar]
+
+    AttrIncludesNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value or with whitespace
+    AttrPrefixNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value
+    AttrSubstringNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value
+    AttrSuffixNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value
 
     // Pseudo-classes
     Negation(Vec<Arc<ComplexSelector<Impl>>>),
@@ -426,10 +435,14 @@ impl<Impl: SelectorImpl> ToCss for SimpleSelector<Impl> {
                     CaseSensitivity::CaseInsensitive => Some(" i"),
                  }, dest)
             }
-            AttrIncludes(ref a, ref v) => attr_selector_to_css(a, " ~= ", v, None, dest),
             AttrDashMatch(ref a, ref v) => attr_selector_to_css(a, " |= ", v, None, dest),
+            AttrIncludesNeverMatch(ref a, ref v) |
+            AttrIncludes(ref a, ref v) => attr_selector_to_css(a, " ~= ", v, None, dest),
+            AttrPrefixNeverMatch(ref a, ref v) |
             AttrPrefixMatch(ref a, ref v) => attr_selector_to_css(a, " ^= ", v, None, dest),
+            AttrSubstringNeverMatch(ref a, ref v) |
             AttrSubstringMatch(ref a, ref v) => attr_selector_to_css(a, " *= ", v, None, dest),
+            AttrSuffixNeverMatch(ref a, ref v) |
             AttrSuffixMatch(ref a, ref v) => attr_selector_to_css(a, " $= ", v, None, dest),
 
             // Pseudo-classes
@@ -609,6 +622,11 @@ fn complex_selector_specificity<Impl>(mut selector: &ComplexSelector<Impl>)
                 SimpleSelector::AttrPrefixMatch(..) |
                 SimpleSelector::AttrSubstringMatch(..) |
                 SimpleSelector::AttrSuffixMatch(..) |
+
+                SimpleSelector::AttrIncludesNeverMatch(..) |
+                SimpleSelector::AttrPrefixNeverMatch(..) |
+                SimpleSelector::AttrSubstringNeverMatch(..) |
+                SimpleSelector::AttrSuffixNeverMatch(..) |
 
                 SimpleSelector::FirstChild | SimpleSelector::LastChild |
                 SimpleSelector::OnlyChild | SimpleSelector::Root |
@@ -862,39 +880,56 @@ fn parse_attribute_selector<P, Impl>(parser: &P, input: &mut CssParser)
         },
     };
 
-    fn parse_value<Impl: SelectorImpl>(input: &mut CssParser) -> Result<Impl::AttrValue, ()> {
-        Ok(from_cow_str(try!(input.expect_ident_or_string())))
-    }
-    // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
         // [foo]
         Err(()) => Ok(SimpleSelector::AttrExists(attr)),
 
         // [foo=bar]
         Ok(Token::Delim('=')) => {
-            Ok(SimpleSelector::AttrEqual(attr, try!(parse_value::<Impl>(input)),
-                                         try!(parse_attribute_flags(input))))
+            let value = try!(input.expect_ident_or_string());
+            let flags = try!(parse_attribute_flags(input));
+            Ok(SimpleSelector::AttrEqual(attr, from_cow_str(value), flags))
         }
         // [foo~=bar]
         Ok(Token::IncludeMatch) => {
-            Ok(SimpleSelector::AttrIncludes(attr, try!(parse_value::<Impl>(input))))
+            let value = try!(input.expect_ident_or_string());
+            if value.is_empty() || value.contains(SELECTOR_WHITESPACE) {
+                Ok(SimpleSelector::AttrIncludesNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrIncludes(attr, from_cow_str(value)))
+            }
         }
         // [foo|=bar]
         Ok(Token::DashMatch) => {
-            let value = try!(parse_value::<Impl>(input));
-            Ok(SimpleSelector::AttrDashMatch(attr, value))
+            let value = try!(input.expect_ident_or_string());
+            Ok(SimpleSelector::AttrDashMatch(attr, from_cow_str(value)))
         }
         // [foo^=bar]
         Ok(Token::PrefixMatch) => {
-            Ok(SimpleSelector::AttrPrefixMatch(attr, try!(parse_value::<Impl>(input))))
+            let value = try!(input.expect_ident_or_string());
+            if value.is_empty() {
+                Ok(SimpleSelector::AttrPrefixNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrPrefixMatch(attr, from_cow_str(value)))
+            }
         }
         // [foo*=bar]
         Ok(Token::SubstringMatch) => {
-            Ok(SimpleSelector::AttrSubstringMatch(attr, try!(parse_value::<Impl>(input))))
+            let value = try!(input.expect_ident_or_string());
+            if value.is_empty() {
+                Ok(SimpleSelector::AttrSubstringNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrSubstringMatch(attr, from_cow_str(value)))
+            }
         }
         // [foo$=bar]
         Ok(Token::SuffixMatch) => {
-            Ok(SimpleSelector::AttrSuffixMatch(attr, try!(parse_value::<Impl>(input))))
+            let value = try!(input.expect_ident_or_string());
+            if value.is_empty() {
+                Ok(SimpleSelector::AttrSuffixNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrSuffixMatch(attr, from_cow_str(value)))
+            }
         }
         _ => Err(())
     }

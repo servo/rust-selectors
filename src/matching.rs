@@ -419,6 +419,12 @@ fn matches_simple_selector<E>(
             relation_if!(element.match_attr_suffix(attr, value),
                          AFFECTED_BY_NON_COMMON_STYLE_AFFECTING_ATTRIBUTE_SELECTOR)
         }
+        SimpleSelector::AttrIncludesNeverMatch(..) |
+        SimpleSelector::AttrPrefixNeverMatch(..) |
+        SimpleSelector::AttrSubstringNeverMatch(..) |
+        SimpleSelector::AttrSuffixNeverMatch(..) => {
+            false
+        }
         SimpleSelector::NonTSPseudoClass(ref pc) => {
             relation_if!(element.match_non_ts_pseudo_class(pc.clone()),
                          AFFECTED_BY_STATE)
