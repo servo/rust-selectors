@@ -1140,6 +1140,8 @@ pub mod tests {
     pub enum PseudoElement {
         Before,
         After,
+        ServoDetailsSummary,
+        ServoDetailsContent,
     }
 
     impl ToCss for PseudoClass {
@@ -1211,6 +1213,8 @@ pub mod tests {
             match_ignore_ascii_case! { &name,
                 "before" => Ok(PseudoElement::Before),
                 "after" => Ok(PseudoElement::After),
+                "-servo-details-summary" => Ok(PseudoElement::ServoDetailsSummary),
+                "-servo-details-content" => Ok(PseudoElement::ServoDetailsContent),
                 _ => Err(())
             }
         }
@@ -1469,5 +1473,30 @@ pub mod tests {
             pseudo_element: None,
             specificity: specificity(1, 1, 0),
         }))));
+    }
+
+    #[test]
+    fn test_details_pseudo_element() {
+        assert_eq!(parse("details::-servo-details-content"), Ok(vec![Selector {
+            compound_selectors: Arc::new(CompoundSelector {
+                simple_selectors: vec!(
+                    SimpleSelector::LocalName(LocalName {
+                        name: Atom::from("details"),
+                        lower_name: Atom::from("details") }),
+                ),
+                next: None,
+            }),
+            pseudo_element: Some(PseudoElement::ServoDetailsContent),
+            specificity: specificity(0, 0, 2),
+        }]));
+        assert_eq!(parse("::-servo-details-summary"), Ok(vec![Selector {
+            compound_selectors: Arc::new(CompoundSelector {
+                simple_selectors: vec!(),
+                next: None,
+            }),
+            pseudo_element: Some(PseudoElement::ServoDetailsSummary),
+            specificity: specificity(0, 0, 1),
+        }]));
+        assert_eq!(parse("details:-servo-details-content"), Err(()));
     }
 }
