@@ -83,20 +83,10 @@ macro_rules! with_bounds {
     }
 }
 
-macro_rules! with_heap_size_bound {
-    ($( $HeapSizeOf: tt )*) => {
-        with_bounds! {
-            [Clone + Eq + Hash $($HeapSizeOf)*]
-            [From<String> + for<'a> From<&'a str>]
-        }
-    }
+with_bounds! {
+    [Clone + Eq + Hash]
+    [From<String> + for<'a> From<&'a str>]
 }
-
-#[cfg(feature = "heap_size")]
-with_heap_size_bound!(+ ::heapsize::HeapSizeOf);
-
-#[cfg(not(feature = "heap_size"))]
-with_heap_size_bound!();
 
 pub trait Parser {
     type Impl: SelectorImpl;
@@ -130,7 +120,6 @@ pub trait Parser {
     }
 }
 
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone, Debug)]
 pub struct SelectorList<Impl: SelectorImpl>(pub Vec<Selector<Impl>>);
 
@@ -146,7 +135,6 @@ impl<Impl: SelectorImpl> SelectorList<Impl> {
     }
 }
 
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(PartialEq, Clone)]
 pub struct Selector<Impl: SelectorImpl> {
     pub complex_selector: Arc<ComplexSelector<Impl>>,
@@ -234,14 +222,12 @@ impl<Impl: SelectorImpl> ComplexSelector<Impl> {
     }
 }
 
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub struct ComplexSelector<Impl: SelectorImpl> {
     pub compound_selector: Vec<SimpleSelector<Impl>>,
     pub next: Option<(Arc<ComplexSelector<Impl>>, Combinator)>,  // c.next is left of c
 }
 
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Eq, PartialEq, Clone, Copy, Debug, Hash)]
 pub enum Combinator {
     Child,  //  >
@@ -250,7 +236,6 @@ pub enum Combinator {
     LaterSibling,  // ~
 }
 
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum SimpleSelector<Impl: SelectorImpl> {
     ID(Impl::Identifier),
@@ -289,7 +274,6 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
 }
 
 #[derive(Eq, PartialEq, Clone, Hash, Copy, Debug)]
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub enum CaseSensitivity {
     CaseSensitive,  // Selectors spec says language-defined, but HTML says sensitive.
     CaseInsensitive,
@@ -297,14 +281,12 @@ pub enum CaseSensitivity {
 
 
 #[derive(Eq, PartialEq, Clone, Hash)]
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct LocalName<Impl: SelectorImpl> {
     pub name: Impl::LocalName,
     pub lower_name: Impl::LocalName,
 }
 
 #[derive(Eq, PartialEq, Clone, Hash)]
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct AttrSelector<Impl: SelectorImpl> {
     pub name: Impl::LocalName,
     pub lower_name: Impl::LocalName,
@@ -312,7 +294,6 @@ pub struct AttrSelector<Impl: SelectorImpl> {
 }
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub enum NamespaceConstraint<Impl: SelectorImpl> {
     Any,
     Specific(Namespace<Impl>),
@@ -320,7 +301,6 @@ pub enum NamespaceConstraint<Impl: SelectorImpl> {
 
 /// FIXME(SimonSapin): should Hash only hash the URL? What is it used for?
 #[derive(Eq, PartialEq, Clone, Hash)]
-#[cfg_attr(feature = "heap_size", derive(HeapSizeOf))]
 pub struct Namespace<Impl: SelectorImpl> {
     pub prefix: Option<Impl::NamespacePrefix>,
     pub url: Impl::NamespaceUrl,
