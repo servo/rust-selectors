@@ -10,6 +10,7 @@ use std::fmt::{self, Display, Debug, Write};
 use std::hash::Hash;
 use std::ops::Add;
 use std::sync::Arc;
+use tree::SELECTOR_WHITESPACE;
 
 macro_rules! with_all_bounds {
     (
@@ -190,6 +191,9 @@ fn matches_non_common_style_affecting_attribute<Impl: SelectorImpl>(simple_selec
         SimpleSelector::AttrPrefixMatch(..) |
         SimpleSelector::AttrSuffixMatch(..) |
         SimpleSelector::AttrSubstringMatch(..) => true,
+
+        // This deliberately includes Attr*NeverMatch
+        // which never match regardless of element attributes.
         _ => false,
     }
 }
@@ -263,6 +267,11 @@ pub enum SimpleSelector<Impl: SelectorImpl> {
     AttrSubstringMatch(AttrSelector<Impl>, Impl::AttrValue),  // [foo*=bar]
     AttrSuffixMatch(AttrSelector<Impl>, Impl::AttrValue),  // [foo$=bar]
 
+    AttrIncludesNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value or with whitespace
+    AttrPrefixNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value
+    AttrSubstringNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value
+    AttrSuffixNeverMatch(AttrSelector<Impl>, Impl::AttrValue),  // empty value
+
     // Pseudo-classes
     Negation(Vec<Arc<ComplexSelector<Impl>>>),
     FirstChild, LastChild, OnlyChild,
@@ -329,8 +338,8 @@ impl<Impl: SelectorImpl> Default for Namespace<Impl> {
 
 impl<Impl: SelectorImpl> Debug for Selector<Impl> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(f.write_str("Selector("));
-        try!(self.to_css(f));
+        f.write_str("Selector(")?;
+        self.to_css(f)?;
         write!(f, ", specificity = 0x{:x})", self.specificity)
     }
 }
@@ -356,10 +365,10 @@ impl<Impl: SelectorImpl> ToCss for SelectorList<Impl> {
         let mut iter = self.0.iter();
         let first = iter.next()
             .expect("Empty SelectorList, should contain at least one selector");
-        try!(first.to_css(dest));
+        first.to_css(dest)?;
         for selector in iter {
-            try!(dest.write_str(", "));
-            try!(selector.to_css(dest));
+            dest.write_str(", ")?;
+            selector.to_css(dest)?;
         }
         Ok(())
     }
@@ -367,9 +376,9 @@ impl<Impl: SelectorImpl> ToCss for SelectorList<Impl> {
 
 impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
-        try!(self.complex_selector.to_css(dest));
+        self.complex_selector.to_css(dest)?;
         if let Some(ref pseudo) = self.pseudo_element {
-            try!(pseudo.to_css(dest));
+            pseudo.to_css(dest)?;
         }
         Ok(())
     }
@@ -378,11 +387,11 @@ impl<Impl: SelectorImpl> ToCss for Selector<Impl> {
 impl<Impl: SelectorImpl> ToCss for ComplexSelector<Impl> {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
         if let Some((ref next, ref combinator)) = self.next {
-            try!(next.to_css(dest));
-            try!(combinator.to_css(dest));
+            next.to_css(dest)?;
+            combinator.to_css(dest)?;
         }
         for simple in &self.compound_selector {
-            try!(simple.to_css(dest));
+            simple.to_css(dest)?;
         }
         Ok(())
     }
@@ -404,11 +413,11 @@ impl<Impl: SelectorImpl> ToCss for SimpleSelector<Impl> {
         use self::SimpleSelector::*;
         match *self {
             ID(ref s) => {
-                try!(dest.write_char('#'));
+                dest.write_char('#')?;
                 display_to_css_identifier(s, dest)
             }
             Class(ref s) => {
-                try!(dest.write_char('.'));
+                dest.write_char('.')?;
                 display_to_css_identifier(s, dest)
             }
             LocalName(ref s) => s.to_css(dest),
@@ -416,8 +425,8 @@ impl<Impl: SelectorImpl> ToCss for SimpleSelector<Impl> {
 
             // Attribute selectors
             AttrExists(ref a) => {
-                try!(dest.write_char('['));
-                try!(a.to_css(dest));
+                dest.write_char('[')?;
+                a.to_css(dest)?;
                 dest.write_char(']')
             }
             AttrEqual(ref a, ref v, case) => {
@@ -426,21 +435,25 @@ impl<Impl: SelectorImpl> ToCss for SimpleSelector<Impl> {
                     CaseSensitivity::CaseInsensitive => Some(" i"),
                  }, dest)
             }
-            AttrIncludes(ref a, ref v) => attr_selector_to_css(a, " ~= ", v, None, dest),
             AttrDashMatch(ref a, ref v) => attr_selector_to_css(a, " |= ", v, None, dest),
+            AttrIncludesNeverMatch(ref a, ref v) |
+            AttrIncludes(ref a, ref v) => attr_selector_to_css(a, " ~= ", v, None, dest),
+            AttrPrefixNeverMatch(ref a, ref v) |
             AttrPrefixMatch(ref a, ref v) => attr_selector_to_css(a, " ^= ", v, None, dest),
+            AttrSubstringNeverMatch(ref a, ref v) |
             AttrSubstringMatch(ref a, ref v) => attr_selector_to_css(a, " *= ", v, None, dest),
+            AttrSuffixNeverMatch(ref a, ref v) |
             AttrSuffixMatch(ref a, ref v) => attr_selector_to_css(a, " $= ", v, None, dest),
 
             // Pseudo-classes
             Negation(ref args) => {
-                try!(dest.write_str(":not("));
+                dest.write_str(":not(")?;
                 let mut args = args.iter();
                 let first = args.next().unwrap();
-                try!(first.to_css(dest));
+                first.to_css(dest)?;
                 for arg in args {
-                    try!(dest.write_str(", "));
-                    try!(arg.to_css(dest));
+                    dest.write_str(", ")?;
+                    arg.to_css(dest)?;
                 }
                 dest.write_str(")")
             }
@@ -465,7 +478,7 @@ impl<Impl: SelectorImpl> ToCss for SimpleSelector<Impl> {
 impl<Impl: SelectorImpl> ToCss for AttrSelector<Impl> {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
         if let NamespaceConstraint::Specific(ref ns) = self.namespace {
-            try!(ns.to_css(dest));
+            ns.to_css(dest)?;
         }
         display_to_css_identifier(&self.name, dest)
     }
@@ -474,8 +487,8 @@ impl<Impl: SelectorImpl> ToCss for AttrSelector<Impl> {
 impl<Impl: SelectorImpl> ToCss for Namespace<Impl> {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result where W: fmt::Write {
         if let Some(ref prefix) = self.prefix {
-            try!(display_to_css_identifier(prefix, dest));
-            try!(dest.write_char('|'));
+            display_to_css_identifier(prefix, dest)?;
+            dest.write_char('|')?;
         }
         Ok(())
     }
@@ -495,14 +508,14 @@ fn attr_selector_to_css<Impl, W>(attr: &AttrSelector<Impl>,
                                  -> fmt::Result
 where Impl: SelectorImpl, W: fmt::Write
 {
-    try!(dest.write_char('['));
-    try!(attr.to_css(dest));
-    try!(dest.write_str(operator));
-    try!(dest.write_char('"'));
-    try!(write!(CssStringWriter::new(dest), "{}", value));
-    try!(dest.write_char('"'));
+    dest.write_char('[')?;
+    attr.to_css(dest)?;
+    dest.write_str(operator)?;
+    dest.write_char('"')?;
+    write!(CssStringWriter::new(dest), "{}", value)?;
+    dest.write_char('"')?;
     if let Some(m) = modifier {
-        try!(dest.write_str(m));
+        dest.write_str(m)?;
     }
     dest.write_char(']')
 }
@@ -610,6 +623,11 @@ fn complex_selector_specificity<Impl>(mut selector: &ComplexSelector<Impl>)
                 SimpleSelector::AttrSubstringMatch(..) |
                 SimpleSelector::AttrSuffixMatch(..) |
 
+                SimpleSelector::AttrIncludesNeverMatch(..) |
+                SimpleSelector::AttrPrefixNeverMatch(..) |
+                SimpleSelector::AttrSubstringNeverMatch(..) |
+                SimpleSelector::AttrSuffixNeverMatch(..) |
+
                 SimpleSelector::FirstChild | SimpleSelector::LastChild |
                 SimpleSelector::OnlyChild | SimpleSelector::Root |
                 SimpleSelector::Empty |
@@ -657,7 +675,7 @@ fn parse_selector<P, Impl>(parser: &P, input: &mut CssParser) -> Result<Selector
     where P: Parser<Impl=Impl>, Impl: SelectorImpl
 {
     let (complex, pseudo_element) =
-        try!(parse_complex_selector_and_pseudo_element(parser, input));
+        parse_complex_selector_and_pseudo_element(parser, input)?;
     Ok(Selector {
         specificity: specificity(&complex, pseudo_element.as_ref()),
         complex_selector: Arc::new(complex),
@@ -671,7 +689,7 @@ fn parse_complex_selector_and_pseudo_element<P, Impl>(
         -> Result<(ComplexSelector<Impl>, Option<Impl::PseudoElement>), ()>
     where P: Parser<Impl=Impl>, Impl: SelectorImpl
 {
-    let (first, mut pseudo_element) = try!(parse_compound_selector(parser, input));
+    let (first, mut pseudo_element) = parse_compound_selector(parser, input)?;
     let mut complex = ComplexSelector{ compound_selector: first, next: None };
 
     'outer_loop: while pseudo_element.is_none() {
@@ -705,7 +723,7 @@ fn parse_complex_selector_and_pseudo_element<P, Impl>(
                 }
             }
         }
-        let (compound_selector, pseudo) = try!(parse_compound_selector(parser, input));
+        let (compound_selector, pseudo) = parse_compound_selector(parser, input)?;
         complex = ComplexSelector {
             compound_selector: compound_selector,
             next: Some((Arc::new(complex), combinator))
@@ -723,7 +741,7 @@ fn parse_complex_selector<P, Impl>(
     where P: Parser<Impl=Impl>, Impl: SelectorImpl
 {
     let (complex, pseudo_element) =
-        try!(parse_complex_selector_and_pseudo_element(parser, input));
+        parse_complex_selector_and_pseudo_element(parser, input)?;
     if pseudo_element.is_some() {
         return Err(())
     }
@@ -737,7 +755,7 @@ fn parse_type_selector<P, Impl>(parser: &P, input: &mut CssParser)
                        -> Result<Option<Vec<SimpleSelector<Impl>>>, ()>
     where P: Parser<Impl=Impl>, Impl: SelectorImpl
 {
-    match try!(parse_qualified_name(parser, input, /* in_attr_selector = */ false)) {
+    match parse_qualified_name(parser, input, /* in_attr_selector = */ false)? {
         None => Ok(None),
         Some((namespace, local_name)) => {
             let mut compound_selector = vec!();
@@ -807,7 +825,7 @@ fn parse_qualified_name<'i, 't, P, Impl>
                 Ok(Token::Delim('|')) => {
                     let prefix = from_cow_str(value);
                     let result = parser.namespace_for_prefix(&prefix);
-                    let url = try!(result.ok_or(()));
+                    let url = result.ok_or(())?;
                     explicit_namespace(input, NamespaceConstraint::Specific(Namespace {
                         prefix: Some(prefix),
                         url: url
@@ -852,7 +870,7 @@ fn parse_attribute_selector<P, Impl>(parser: &P, input: &mut CssParser)
                                      -> Result<SimpleSelector<Impl>, ()>
     where P: Parser<Impl=Impl>, Impl: SelectorImpl
 {
-    let attr = match try!(parse_qualified_name(parser, input, /* in_attr_selector = */ true)) {
+    let attr = match parse_qualified_name(parser, input, /* in_attr_selector = */ true)? {
         None => return Err(()),
         Some((_, None)) => unreachable!(),
         Some((namespace, Some(local_name))) => AttrSelector {
@@ -862,39 +880,56 @@ fn parse_attribute_selector<P, Impl>(parser: &P, input: &mut CssParser)
         },
     };
 
-    fn parse_value<Impl: SelectorImpl>(input: &mut CssParser) -> Result<Impl::AttrValue, ()> {
-        Ok(from_cow_str(try!(input.expect_ident_or_string())))
-    }
-    // TODO: deal with empty value or value containing whitespace (see spec)
     match input.next() {
         // [foo]
         Err(()) => Ok(SimpleSelector::AttrExists(attr)),
 
         // [foo=bar]
         Ok(Token::Delim('=')) => {
-            Ok(SimpleSelector::AttrEqual(attr, try!(parse_value::<Impl>(input)),
-                                         try!(parse_attribute_flags(input))))
+            let value = input.expect_ident_or_string()?;
+            let flags = parse_attribute_flags(input)?;
+            Ok(SimpleSelector::AttrEqual(attr, from_cow_str(value), flags))
         }
         // [foo~=bar]
         Ok(Token::IncludeMatch) => {
-            Ok(SimpleSelector::AttrIncludes(attr, try!(parse_value::<Impl>(input))))
+            let value = input.expect_ident_or_string()?;
+            if value.is_empty() || value.contains(SELECTOR_WHITESPACE) {
+                Ok(SimpleSelector::AttrIncludesNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrIncludes(attr, from_cow_str(value)))
+            }
         }
         // [foo|=bar]
         Ok(Token::DashMatch) => {
-            let value = try!(parse_value::<Impl>(input));
-            Ok(SimpleSelector::AttrDashMatch(attr, value))
+            let value = input.expect_ident_or_string()?;
+            Ok(SimpleSelector::AttrDashMatch(attr, from_cow_str(value)))
         }
         // [foo^=bar]
         Ok(Token::PrefixMatch) => {
-            Ok(SimpleSelector::AttrPrefixMatch(attr, try!(parse_value::<Impl>(input))))
+            let value = input.expect_ident_or_string()?;
+            if value.is_empty() {
+                Ok(SimpleSelector::AttrPrefixNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrPrefixMatch(attr, from_cow_str(value)))
+            }
         }
         // [foo*=bar]
         Ok(Token::SubstringMatch) => {
-            Ok(SimpleSelector::AttrSubstringMatch(attr, try!(parse_value::<Impl>(input))))
+            let value = input.expect_ident_or_string()?;
+            if value.is_empty() {
+                Ok(SimpleSelector::AttrSubstringNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrSubstringMatch(attr, from_cow_str(value)))
+            }
         }
         // [foo$=bar]
         Ok(Token::SuffixMatch) => {
-            Ok(SimpleSelector::AttrSuffixMatch(attr, try!(parse_value::<Impl>(input))))
+            let value = input.expect_ident_or_string()?;
+            if value.is_empty() {
+                Ok(SimpleSelector::AttrSuffixNeverMatch(attr, from_cow_str(value)))
+            } else {
+                Ok(SimpleSelector::AttrSuffixMatch(attr, from_cow_str(value)))
+            }
         }
         _ => Err(())
     }
@@ -943,7 +978,7 @@ fn parse_compound_selector<P, Impl>(
         }
     }
     let mut empty = true;
-    let mut compound_selector = match try!(parse_type_selector(parser, input)) {
+    let mut compound_selector = match parse_type_selector(parser, input)? {
         None => {
             match parser.default_namespace() {
                 // If there was no explicit type selector, but there is a
@@ -961,9 +996,7 @@ fn parse_compound_selector<P, Impl>(
 
     let mut pseudo_element = None;
     loop {
-        match try!(parse_one_simple_selector(parser,
-                                             input,
-                                             /* inside_negation = */ false)) {
+        match parse_one_simple_selector(parser, input, /* inside_negation = */ false)? {
             None => break,
             Some(SimpleSelectorParseResult::SimpleSelector(s)) => {
                 compound_selector.push(s);
@@ -1013,7 +1046,7 @@ fn parse_functional_pseudo_class<P, Impl>(parser: &P,
 fn parse_nth_pseudo_class<Impl, F>(input: &mut CssParser, selector: F)
                                    -> Result<SimpleSelector<Impl>, ()>
 where Impl: SelectorImpl, F: FnOnce(i32, i32) -> SimpleSelector<Impl> {
-    let (a, b) = try!(parse_nth(input));
+    let (a, b) = parse_nth(input)?;
     Ok(selector(a, b))
 }
 
@@ -1045,9 +1078,7 @@ fn parse_one_simple_selector<P, Impl>(parser: &P,
             }
         }
         Ok(Token::SquareBracketBlock) => {
-            let attr = try!(input.parse_nested_block(|input| {
-                parse_attribute_selector(parser, input)
-            }));
+            let attr = input.parse_nested_block(|input| parse_attribute_selector(parser, input))?;
             Ok(Some(SimpleSelectorParseResult::SimpleSelector(attr)))
         }
         Ok(Token::Colon) => {
@@ -1059,23 +1090,23 @@ fn parse_one_simple_selector<P, Impl>(parser: &P,
                        name.eq_ignore_ascii_case("after") ||
                        name.eq_ignore_ascii_case("first-line") ||
                        name.eq_ignore_ascii_case("first-letter") {
-                        let pseudo_element = try!(P::parse_pseudo_element(parser, name));
+                        let pseudo_element = P::parse_pseudo_element(parser, name)?;
                         Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo_element)))
                     } else {
-                        let pseudo_class = try!(parse_simple_pseudo_class(parser, name));
+                        let pseudo_class = parse_simple_pseudo_class(parser, name)?;
                         Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo_class)))
                     }
                 }
                 Ok(Token::Function(name)) => {
-                    let pseudo = try!(input.parse_nested_block(|input| {
+                    let pseudo = input.parse_nested_block(|input| {
                         parse_functional_pseudo_class(parser, input, name, inside_negation)
-                    }));
+                    })?;
                     Ok(Some(SimpleSelectorParseResult::SimpleSelector(pseudo)))
                 }
                 Ok(Token::Colon) => {
                     match input.next_including_whitespace() {
                         Ok(Token::Ident(name)) => {
-                            let pseudo = try!(P::parse_pseudo_element(parser, name));
+                            let pseudo = P::parse_pseudo_element(parser, name)?;
                             Ok(Some(SimpleSelectorParseResult::PseudoElement(pseudo)))
                         }
                         _ => Err(())
@@ -1136,8 +1167,8 @@ pub mod tests {
             match *self {
                 PseudoClass::Hover => dest.write_str(":hover"),
                 PseudoClass::Lang(ref lang) => {
-                    try!(dest.write_str(":lang("));
-                    try!(serialize_identifier(lang, dest));
+                    dest.write_str(":lang(")?;
+                    serialize_identifier(lang, dest)?;
                     dest.write_char(')')
                 }
             }
